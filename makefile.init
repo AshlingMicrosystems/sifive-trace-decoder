@@ -1,6 +1,6 @@
-OBJS += ./dqr.o ./main.o ./trace.o vcd.o
-INCLUDES += ../include/dqr.hpp ../include/trace.hpp
-SWIGLIBOBJS += ./dqr_wrap.o ./dqr.o ./trace.o ./vcd.o
+OBJS += ./dqr.o ./main.o ./trace.o vcd.o ./dqr_interface.o
+INCLUDES += ../include/dqr.hpp ../include/trace.hpp ../include/dqr_interface.hpp
+SWIGLIBOBJS += ./dqr_wrap.o ./dqr.o ./trace.o ./vcd.o ./dqr_interface.o
 SWIGINCLUDES += ../include/dqr.i
 SWIGCPP += ./dqr_wrap.cpp
 SWIGOBJ += ./dqr_wrap.o
@@ -64,7 +64,7 @@ ifeq ($(OS),Windows_NT)
             JNIINCLUDEPATHS := -I"$(JNIINCLUDE)" -I"$(JNIINCLUDE)\win32"
         endif
     endif
-    CFLAGS += -D WINDOWS -std=c++11
+    CFLAGS += -D WINDOWS -std=c++11 -DDLL_EXPORT
     SWIGCFLAGS += -D WINDOWS -std=c++11
     PICLIBFLAGS :=
 #    LNFLAGS = -static
