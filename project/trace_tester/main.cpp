@@ -1,4 +1,5 @@
 #include <iostream>
+#include <memory>
 #include "dqr_interface.hpp"
 
 #ifdef WINDOWS
@@ -11,7 +12,7 @@
 	#ifdef _DEBUG
 		#define DECODER_DLL_PATH "..\\..\\..\\..\\Debug\\dqr.dll"
 	#else
-		#define DECODER_DLL_PATH "..\\..\\..\\..\\Release\\dqr.dll"
+		#define DECODER_DLL_PATH ".\\dqr.dll"
 	#endif
 	#else
 	#ifdef _DEBUG
@@ -26,15 +27,15 @@
 #endif
 
 #ifdef WINDOWS
-char TRACE_FILE[] = ".\\test_samples\\e31_hello_debug.htm.test\\e31_hello.rtd";
-char ELF_FILE[] = ".\\test_samples\\e31_hello_debug.htm.test\\e31_hello.elf";
-char OUT_FILE[] = ".\\test_samples\\e31_hello_debug.htm.test\\trace_out.txt";
-char OBJDUMP_PATH[] = ".\\bin\\riscv64-unknown-elf-objdump.exe";
+	char TRACE_FILE[] = ".\\test_samples\\sifive_sum\\sifive_sum.rtd";
+	char ELF_FILE[] = ".\\test_samples\\sifive_sum\\sifive_sum.elf";
+	char OUT_FILE[] = ".\\test_samples\\sifive_sum\\trace_out.txt";
+	char OBJDUMP_PATH[] = "C:\\Users\\Arjun\\Downloads\\RiscFreeForIntelv22.4.2_test8\\toolchain\\riscv32-unknown-elf\\bin\\riscv32-unknown-elf-objdump.exe";
 #else
-char TRACE_FILE[] = "./test_samples/e31_hello_debug.htm.test/e31_hello.rtd";
-char ELF_FILE[] = "./test_samples/e31_hello_debug.htm.test/e31_hello.elf";
-char OUT_FILE[] = "./test_samples/e31_hello_debug.htm.test/trace_out.txt";
-char OBJDUMP_PATH[] = "./bin/riscv64-unknown-elf-objdump";
+	char TRACE_FILE[] = "./test_samples/sifive_sum/sifive_sum.rtd";
+	char ELF_FILE[] = "./test_samples/sifive_sum/sifive_sum.elf";
+	char OUT_FILE[] = "./test_samples/sifive_sum/trace_out.txt";
+	char OBJDUMP_PATH[] = "./bin/riscv64-unknown-elf-objdump";
 #endif
 
 int main()
@@ -46,17 +47,26 @@ int main()
 		return -1;
 	}
 
-	typedef SifiveDecoderInterface* (*fpSifiveDecoderInterface)();
-	fpSifiveDecoderInterface p_get_instance = reinterpret_cast<fpSifiveDecoderInterface>(GetProcAddress(dll_handle, "GetSifiveDecoderInterface"));
+	fpGetSifiveDecoderInterface p_get_instance = reinterpret_cast<fpGetSifiveDecoderInterface>(GetProcAddress(dll_handle, "GetSifiveDecoderInterface"));
+	std::unique_ptr<SifiveDecoderInterface> p_sifive_decoder(p_get_instance());
 	SifiveDecoderInterface* decoder = p_get_instance();
 
+	std::cout << "Configuring Decoder ..." << std::endl;
+	TDecoderConfig config;
+	config.trace_filepath = TRACE_FILE;
+	config.elf_filepath = ELF_FILE;
+	config.objdump_path = OBJDUMP_PATH;
+	decoder->Configure(config);
+
 	std::cout << "Decoding ..." << std::endl;
-	int res = decoder->Decode(TRACE_FILE, ELF_FILE, OBJDUMP_PATH, OUT_FILE);
-	if (res != 0)
+	TySifiveTraceDecodeError res = decoder->Decode(OUT_FILE);
+	if (res != SIFIVE_TRACE_DECODER_OK)
 	{
 		std::cout << "Error in Decoding ..." << std::endl;
 		return -1;
 	}
+
 	std::cout << "Decoding Complete..." << std::endl;
 	return 0;
 }
+

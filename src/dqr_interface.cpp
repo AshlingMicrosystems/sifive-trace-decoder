@@ -80,15 +80,17 @@ static const char *stripPath(const char *prefix, const char *srcpath)
   Date         Initials    Description
 2-Nov-2022     AS          Initial
 ****************************************************************************/
-int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, char* out_file)
+TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 {
 	if(out_file == nullptr)
 	{
-		return -1;
+		return SIFIVE_TRACE_DECODER_INPUT_ARG_NULL;
 	}
 	FILE* fp = fopen(out_file, "a");
 	if(!fp)
-		return -1;
+	{
+		return SIFIVE_TRACE_DECODER_CANNOT_OPEN_FILE;
+	}
 	Trace *trace = nullptr;
 	Simulator *sim = nullptr;
 	VCD *vcd = nullptr;
@@ -97,13 +99,13 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 		if ( ef_name == nullptr) {
 			printf("Error: Simulator requires an ELF file (-e switch)\n");
 
-			return 1;
+			return SIFIVE_TRACE_DECODER_ELF_NULL;
 		}
 
 		sim = new (std::nothrow) Simulator(sf_name,ef_name,od_name);
 		if (sim == nullptr) {
 			printf("Error: Could not create Simulator object\n");
-			return 1;
+			return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 		}
 
 		if (sim->getStatus() != TraceDqr::DQERR_OK) {
@@ -111,7 +113,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 			sim = nullptr;
 			printf("Error: new Simulator(%s,%d) failed\n",sf_name,archSize);
 
-			return 1;
+			return SIFIVE_TRACE_DECODER_SIM_STATUS_ERROR;
 		}
 
 		if (cutPath != nullptr) {
@@ -120,7 +122,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 			rc = sim->subSrcPath(cutPath,newRoot);
 			if (rc != TraceDqr::DQERR_OK) {
 				printf("Error: Could not set cutPath or newRoot\n");
-				return 1;
+				return SIFIVE_TRACE_DECODER_ERR;
 			}
 		}
 
@@ -131,7 +133,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 			vcd = new (std::nothrow) VCD(pf_name);
 			if (vcd == nullptr) {
 				printf("Error: Could not create VCD object\n");
-				return 1;
+				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 			}
 
 			if (vcd->getStatus() != TraceDqr::DQERR_OK) {
@@ -139,20 +141,20 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 				vcd = nullptr;
 				printf("Error: new VCD(%s) failed\n",pf_name);
 
-				return 1;
+				return SIFIVE_TRACE_DECODER_VCD_STATUS_ERROR;
 			}
 		}
 		else {
 			if ( ef_name == nullptr) {
 				printf("Error: -vf switch also requires an ELF file (-e switch)\n");
 
-				return 1;
+				return SIFIVE_TRACE_DECODER_ELF_NULL;
 			}
 
 			vcd = new (std::nothrow) VCD(vf_name,ef_name,od_name);
 			if (vcd == nullptr) {
 				printf("Error: Could not create VCD object\n");
-				return 1;
+				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 			}
 
 			if (vcd->getStatus() != TraceDqr::DQERR_OK) {
@@ -160,7 +162,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 				vcd = nullptr;
 				printf("Error: new VCD(%s,%s,%s) failed\n",vf_name,ef_name,od_name);
 
-				return 1;
+				return SIFIVE_TRACE_DECODER_VCD_STATUS_ERROR;
 			}
 
 			if (cutPath != nullptr) {
@@ -169,7 +171,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 				rc = vcd->subSrcPath(cutPath,newRoot);
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: Could not set cutPath or newRoot\n");
-					return 1;
+					return SIFIVE_TRACE_DECODER_ERR;
 				}
 			}
 		}
@@ -184,12 +186,12 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 
 			if (tf_name != nullptr) {
 				printf("Error: cannot specify -t flag when -pf is also specified\n");
-				return 1;
+				return SIFIVE_TRACE_DECODER_ERR;
 			}
 
 			if (ef_name != nullptr) {
 				printf("Error: cannot specify -e flag when -pf is also specified\n");
-				return 1;
+				return SIFIVE_TRACE_DECODER_ERR;
 			}
 
 			trace = new (std::nothrow) Trace(pf_name);
@@ -197,7 +199,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 			if (trace == nullptr) {
 				printf("Error: Could not create Trace object\n");
 
-				return 1;
+				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 			}
 
 			if (trace->getStatus() != TraceDqr::DQERR_OK) {
@@ -206,7 +208,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 
 				printf("Error: new Trace() failed\n",pf_name);
 
-				return 1;
+				return SIFIVE_TRACE_DECODER_TRACE_STATUS_ERROR;
 			}
 		}
 		else {
@@ -215,7 +217,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 			if (trace == nullptr) {
 				printf("Error: Could not create Trace object\n");
 
-				return 1;
+				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 			}
 
 			if (trace->getStatus() != TraceDqr::DQERR_OK) {
@@ -224,7 +226,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 
 				printf("Error: new Trace(%s,%s) failed\n",tf_name,ef_name);
 
-				return 1;
+				return SIFIVE_TRACE_DECODER_TRACE_STATUS_ERROR;
 			}
 
 			trace->setTraceType(traceType);
@@ -233,7 +235,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 				rc = trace->setCATraceFile(ca_name,caType);
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: Could not set cycle accurate trace file\n");
-					return 1;
+					return SIFIVE_TRACE_DECODER_ERR;
 				}
 			}
 
@@ -244,7 +246,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 				rc = trace->subSrcPath(cutPath,newRoot);
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: Could not set cutPath or newRoot\n");
-					return 1;
+					return SIFIVE_TRACE_DECODER_ERR;
 				}
 			}
 
@@ -259,14 +261,14 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 				rc = trace->enableCTFConverter(-1,nullptr);
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: Could not set CTF file\n");
-					return 1;
+					return SIFIVE_TRACE_DECODER_ERR;
 				}
 			}
 		}
 	}
 	else {
 		printf("Error: must specify either simulator file, trace file, SWT trace server, properties file, or base name\n");
-		return 1;
+		return SIFIVE_TRACE_DECODER_ERR;
 	}
 
 	TraceDqr::DQErr ec;
@@ -609,7 +611,7 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 	}
 	else {
 		printf("Error (%d) terminated trace decode\n",ec);
-		return 1;
+		return SIFIVE_TRACE_DECODER_ERR;
 	}
 
 	if ((trace != nullptr) && (itcPrintOpts != TraceDqr::ITC_OPT_NONE)) {
@@ -684,7 +686,47 @@ int SifiveDecoderInterface::Decode(char* tf_name, char* ef_name, char* od_name, 
 		vcd = nullptr;
 	}
 
-	return 0;
+	return SIFIVE_TRACE_DECODER_OK;
+}
+
+/****************************************************************************
+     Function: Configure
+     Engineer: Arjun Suresh
+        Input: config - Decoder config structure
+       Output: None
+       return: TySifiveTraceDecodeError
+  Description: Function to configure the decoder
+  Date         Initials    Description
+2-Nov-2022     AS          Initial
+****************************************************************************/
+TySifiveTraceDecodeError SifiveDecoderInterface::Configure(const TDecoderConfig& config)
+{
+	tf_name = config.trace_filepath;
+	ef_name = config.elf_filepath;
+	od_name = config.objdump_path;
+	src_flag = config.display_src_info;
+	file_flag = config.display_file_info;
+	dasm_flag = config.display_dissassembly_info;
+	trace_flag = config.display_trace_msg;
+	func_flag = config.display_function_info;
+	showCallsReturns = config.display_call_return_info;
+	showBranches = config.display_branches_info;
+	globalDebugFlag = config.display_raw_message_info;
+	ctf_flag = config.enable_common_trace_format;
+	analytics_detail = config.analytics_detail_log_level;
+	caType = config.cycle_accuracte_type;
+	traceType = config.trace_type;
+	numAddrBits = config.numAddrBits;
+	addrDispFlags = config.addrDispFlags;
+	archSize = config.archSize;
+	msgLevel = config.trace_msg_log_level;
+	tssize = config.timestamp_counter_size_in_bits;
+	freq = config.timestamp_tick_clk_freq_hz;
+	srcbits = config.src_field_size_bits;
+	itcPrintOpts = config.itc_print_options;
+	itcPrintChannel = config.itc_print_channel;
+
+	return SIFIVE_TRACE_DECODER_OK;
 }
 
 /****************************************************************************
