@@ -97,7 +97,7 @@ struct TDecoderConfig
 	uint32_t analytics_detail_log_level = TySifiveTraceAnalyticsLogLevel::DISABLE;
 	TraceDqr::CATraceType cycle_accuracte_type = TraceDqr::CATRACE_NONE;
 	TraceDqr::TraceType trace_type = TraceDqr::TRACETYPE_BTM;
-	uint32_t numAddrBits = 64;
+	uint32_t numAddrBits = 0;
 	uint32_t addrDispFlags = 0;
 	uint32_t archSize = 0;
 	uint32_t trace_msg_log_level = 1;

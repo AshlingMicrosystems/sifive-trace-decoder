@@ -391,6 +391,10 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 
 							firstPrint = false;
 						}
+						else
+						{
+							fprintf(fp, "\n");
+						}
 					}
 				}
 			}
