@@ -1516,6 +1516,40 @@ TraceDqr::DQErr ObjDump::execObjDump(const char *elfName,const char *objdumpPath
 
 //  printf("cmd: '%s'\n",cmd);
 
+#ifdef WINDOWS
+	SECURITY_ATTRIBUTES sa;
+	sa.nLength = sizeof(sa);
+	sa.lpSecurityDescriptor = NULL;
+	sa.bInheritHandle = TRUE;
+
+	hStdOutPipeRead = NULL;
+	hStdOutPipeWrite = NULL;
+	if (CreatePipe(&hStdOutPipeRead, &hStdOutPipeWrite, &sa, 0) == FALSE) 
+	{
+		return TraceDqr::DQERR_ERR;
+	}
+
+
+	STARTUPINFO si;
+	DWORD flags = CREATE_NO_WINDOW;
+
+	ZeroMemory(&pi, sizeof(PROCESS_INFORMATION));
+	ZeroMemory(&si, sizeof(STARTUPINFO));
+	si.cb = sizeof(STARTUPINFO);
+	si.dwFlags |= STARTF_USESTDHANDLES;
+	si.hStdError = hStdOutPipeWrite;
+	si.hStdOutput = hStdOutPipeWrite;
+	si.hStdInput = NULL;
+
+	if (CreateProcess(NULL, cmd, NULL, NULL, TRUE, flags, NULL, NULL, &si, &pi) == FALSE)
+	{
+		return TraceDqr::DQERR_ERR;
+	}
+	
+	// Close pipes we do not need.
+	CloseHandle(hStdOutPipeWrite);
+	hStdOutPipeWrite = NULL;
+#else
   fpipe = _popen(cmd,"rb");
   if (fpipe == NULL) {
     printf("Error: popen(): Failed\n");
@@ -1527,7 +1561,7 @@ TraceDqr::DQErr ObjDump::execObjDump(const char *elfName,const char *objdumpPath
     printf("Error: fileno(): Failed\n");
     return TraceDqr::DQERR_ERR;
   }
-
+#endif
   return TraceDqr::DQERR_OK;
 }
 
@@ -1632,6 +1666,40 @@ TraceDqr::DQErr ObjDump::execObjDump(const char *elfName,const char *objdumpPath
 
 #endif // WINDOWS
 
+#ifdef WINDOWS
+TraceDqr::DQErr ObjDump::fillPipeBuffer()
+{
+    if (pipeEOF) {
+        return TraceDqr::DQERR_OK;
+    }
+
+    if (hStdOutPipeRead == NULL) {
+        printf("Error: fillPipeBuffer(): Invalid pipe\n");
+        return TraceDqr::DQERR_ERR;
+    }
+
+	DWORD dwRead = 0;
+	ReadFile(hStdOutPipeRead, pipeBuffer, sizeof pipeBuffer, &dwRead, NULL);
+    if (dwRead < 0) {
+        printf("Error: fillPipeBuffer(): read() failed\n");
+        return TraceDqr::DQERR_ERR;
+    }
+
+    if (dwRead == 0) {
+        pipeEOF = 0;
+		WaitForSingleObject(pi.hProcess, INFINITE);
+		CloseHandle(pi.hProcess);
+		CloseHandle(pi.hThread);
+    	CloseHandle(hStdOutPipeRead);
+    	hStdOutPipeRead = NULL;
+    }
+
+    endOfBuffer = dwRead;
+    pipeIndex = 0;
+
+    return TraceDqr::DQERR_OK;
+}
+#else
 TraceDqr::DQErr ObjDump::fillPipeBuffer()
 {
     int rc;
@@ -1667,6 +1735,7 @@ TraceDqr::DQErr ObjDump::fillPipeBuffer()
 
     return TraceDqr::DQERR_OK;
 }
+#endif
 
 bool ObjDump::isWSLookahead()
 {

@@ -14,6 +14,9 @@
 #include <cassert>
 #include <fcntl.h>
 #include <unistd.h>
+#ifdef WINDOWS
+#include<windows.h>
+#endif
 
 #ifdef DO_TIMES
 class Timer {
@@ -249,7 +252,11 @@ private:
 		int  endOfBuffer = 0;
 
 		pid_t objdumpPid;
-
+#ifdef WINDOWS
+		HANDLE hStdOutPipeRead = NULL;
+		HANDLE hStdOutPipeWrite = NULL;
+		PROCESS_INFORMATION pi;
+#endif
 		TraceDqr::DQErr execObjDump(const char *elfName,const char *objdumpPath);
 		TraceDqr::DQErr fillPipeBuffer();
 		objDumpTokenType getNextLex(char *lex);
