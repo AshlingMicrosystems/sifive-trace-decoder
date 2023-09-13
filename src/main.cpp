@@ -857,6 +857,15 @@ int main(int argc, char *argv[])
 		}
 
 		if (ec == TraceDqr::DQERR_OK) {
+			if(trace != nullptr && msgInfo != nullptr)
+			{
+				if(msgInfo->haveTimestamp)
+				{
+					//printf("\nTimestamped Address %llu %x\n", msgInfo->time, msgInfo->currentAddress);
+					printf("\n%x", msgInfo->currentAddress);
+				}
+			}
+
 			if (srcInfo != nullptr) {
 				if ((lastSrcFile != srcInfo->sourceFile) || (lastSrcLine != srcInfo->sourceLine) || (lastSrcLineNum != srcInfo->sourceLineNum)) {
 					lastSrcFile = srcInfo->sourceFile;
@@ -1081,8 +1090,6 @@ int main(int argc, char *argv[])
 				if (globalDebugFlag) {
 					msgInfo->dumpRawMessage();
 				}
-
-				msgInfo->messageToText(dst,sizeof dst,msgLevel);
 
 				if (firstPrint == false) {
 					printf("\n");

@@ -27,10 +27,10 @@
 #endif
 
 #ifdef WINDOWS
-	char TRACE_FILE[] = ".\\test_samples\\sifive_sum\\sifive_sum.rtd";
-	char ELF_FILE[] = ".\\test_samples\\sifive_sum\\sifive_sum.elf";
-	char OUT_FILE[] = ".\\test_samples\\sifive_sum\\trace_out.txt";
-	char OBJDUMP_PATH[] = "C:\\Users\\Arjun\\Downloads\\RiscFreeForIntelv22.4.2_test8\\toolchain\\riscv32-unknown-elf\\bin\\riscv32-unknown-elf-objdump.exe";
+	char TRACE_FILE[] = ".\\test_samples\\ts\\trc_encodedFile_session_id_0.rtd";
+	char ELF_FILE[] = ".\\test_samples\\ts\\sifive_sum.elf";
+	char OUT_FILE[] = ".\\test_samples\\ts\\trace_out.txt";
+	char OBJDUMP_PATH[] = ".\\bin\\riscv64-unknown-elf-objdump.exe";
 #else
 	char TRACE_FILE[] = "./test_samples/sifive_sum/sifive_sum.rtd";
 	char ELF_FILE[] = "./test_samples/sifive_sum/sifive_sum.elf";
@@ -56,8 +56,13 @@ int main()
 	config.trace_filepath = TRACE_FILE;
 	config.elf_filepath = ELF_FILE;
 	config.objdump_path = OBJDUMP_PATH;
+	config.enable_profiling_format = true;
+	config.display_src_info = false;
+	config.display_file_info = false;
+	config.display_function_info = false;
+	config.display_dissassembly_info = false;
 	decoder->Configure(config);
-
+	 
 	std::cout << "Decoding ..." << std::endl;
 	TySifiveTraceDecodeError res = decoder->Decode(OUT_FILE);
 	if (res != SIFIVE_TRACE_DECODER_OK)

@@ -94,6 +94,7 @@ struct TDecoderConfig
 	bool display_branches_info = true;
 	bool display_raw_message_info = false;
 	bool enable_common_trace_format = false;
+	bool enable_profiling_format = false;
 	uint32_t analytics_detail_log_level = TySifiveTraceAnalyticsLogLevel::DISABLE;
 	TraceDqr::CATraceType cycle_accuracte_type = TraceDqr::CATRACE_NONE;
 	TraceDqr::TraceType trace_type = TraceDqr::TRACETYPE_BTM;
@@ -133,6 +134,7 @@ private:
 	bool showCallsReturns = true; // Output Call Return Info
 	bool showBranches = true;     // Output Branch Info
 	bool ctf_flag = false;		  // Output Trace as Common Trace Format (Limited Support)
+	bool profile_flag = false;	  // Output PC value with timestamp only
 	int numAddrBits = 0;		  // Display Address as n bits
 	uint32_t addrDispFlags = 0;   // Address display formatting options
 	TraceDqr::pathType pt = TraceDqr::PATH_TO_UNIX; // Display format for path info

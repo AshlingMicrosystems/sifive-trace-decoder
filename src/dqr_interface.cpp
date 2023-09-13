@@ -324,6 +324,16 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 		}
 
 		if (ec == TraceDqr::DQERR_OK) {
+			if(profile_flag)
+			{
+				if(trace != nullptr && msgInfo != nullptr)
+				{
+					if(msgInfo->haveTimestamp)
+					{
+						fprintf(fp, "%x\n", msgInfo->currentAddress);
+					}
+				}
+			}
 			if (srcInfo != nullptr) {
 				if ((lastSrcFile != srcInfo->sourceFile) || (lastSrcLine != srcInfo->sourceLine) || (lastSrcLineNum != srcInfo->sourceLineNum)) {
 					lastSrcFile = srcInfo->sourceFile;
@@ -611,7 +621,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 		if (firstPrint == false) {
 			fprintf(fp, "\n");
 		}
-		fprintf(fp, "End of Trace File\n");
+		//fprintf(fp, "End of Trace File\n");
 	}
 	else {
 		printf("Error (%d) terminated trace decode\n",ec);
@@ -717,6 +727,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Configure(const TDecoderConfig&
 	showBranches = config.display_branches_info;
 	globalDebugFlag = config.display_raw_message_info;
 	ctf_flag = config.enable_common_trace_format;
+	profile_flag = config.enable_profiling_format;
 	analytics_detail = config.analytics_detail_log_level;
 	caType = config.cycle_accuracte_type;
 	traceType = config.trace_type;
