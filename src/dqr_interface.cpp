@@ -86,33 +86,29 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 	{
 		return SIFIVE_TRACE_DECODER_INPUT_ARG_NULL;
 	}
-	FILE* fp = fopen(out_file, "a");
-	if(!fp)
-	{
-		return SIFIVE_TRACE_DECODER_CANNOT_OPEN_FILE;
-	}
-	Trace *trace = nullptr;
-	Simulator *sim = nullptr;
-	VCD *vcd = nullptr;
+
+	trace = nullptr;
+	sim = nullptr;
+	vcd = nullptr;
+	fp = nullptr;
 
 	if (sf_name != nullptr) {
 		if ( ef_name == nullptr) {
 			printf("Error: Simulator requires an ELF file (-e switch)\n");
-
+			CleanUp();
 			return SIFIVE_TRACE_DECODER_ELF_NULL;
 		}
 
 		sim = new (std::nothrow) Simulator(sf_name,ef_name,od_name);
 		if (sim == nullptr) {
 			printf("Error: Could not create Simulator object\n");
+			CleanUp();
 			return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 		}
 
 		if (sim->getStatus() != TraceDqr::DQERR_OK) {
-			delete sim;
-			sim = nullptr;
 			printf("Error: new Simulator(%s,%d) failed\n",sf_name,archSize);
-
+			CleanUp();
 			return SIFIVE_TRACE_DECODER_SIM_STATUS_ERROR;
 		}
 
@@ -122,6 +118,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 			rc = sim->subSrcPath(cutPath,newRoot);
 			if (rc != TraceDqr::DQERR_OK) {
 				printf("Error: Could not set cutPath or newRoot\n");
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_ERR;
 			}
 		}
@@ -133,35 +130,33 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 			vcd = new (std::nothrow) VCD(pf_name);
 			if (vcd == nullptr) {
 				printf("Error: Could not create VCD object\n");
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 			}
 
 			if (vcd->getStatus() != TraceDqr::DQERR_OK) {
-				delete vcd;
-				vcd = nullptr;
 				printf("Error: new VCD(%s) failed\n",pf_name);
-
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_VCD_STATUS_ERROR;
 			}
 		}
 		else {
 			if ( ef_name == nullptr) {
 				printf("Error: -vf switch also requires an ELF file (-e switch)\n");
-
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_ELF_NULL;
 			}
 
 			vcd = new (std::nothrow) VCD(vf_name,ef_name,od_name);
 			if (vcd == nullptr) {
 				printf("Error: Could not create VCD object\n");
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 			}
 
 			if (vcd->getStatus() != TraceDqr::DQERR_OK) {
-				delete vcd;
-				vcd = nullptr;
 				printf("Error: new VCD(%s,%s,%s) failed\n",vf_name,ef_name,od_name);
-
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_VCD_STATUS_ERROR;
 			}
 
@@ -171,6 +166,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 				rc = vcd->subSrcPath(cutPath,newRoot);
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: Could not set cutPath or newRoot\n");
+					CleanUp();
 					return SIFIVE_TRACE_DECODER_ERR;
 				}
 			}
@@ -186,11 +182,13 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 
 			if (tf_name != nullptr) {
 				printf("Error: cannot specify -t flag when -pf is also specified\n");
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_ERR;
 			}
 
 			if (ef_name != nullptr) {
 				printf("Error: cannot specify -e flag when -pf is also specified\n");
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_ERR;
 			}
 
@@ -198,16 +196,13 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 
 			if (trace == nullptr) {
 				printf("Error: Could not create Trace object\n");
-
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 			}
 
 			if (trace->getStatus() != TraceDqr::DQERR_OK) {
-				delete trace;
-				trace = nullptr;
-
 				printf("Error: new Trace() failed\n",pf_name);
-
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_TRACE_STATUS_ERROR;
 			}
 		}
@@ -216,16 +211,13 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 
 			if (trace == nullptr) {
 				printf("Error: Could not create Trace object\n");
-
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 			}
 
 			if (trace->getStatus() != TraceDqr::DQERR_OK) {
-				delete trace;
-				trace = nullptr;
-
 				printf("Error: new Trace(%s,%s) failed\n",tf_name,ef_name);
-
+				CleanUp();
 				return SIFIVE_TRACE_DECODER_TRACE_STATUS_ERROR;
 			}
 
@@ -235,6 +227,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 				rc = trace->setCATraceFile(ca_name,caType);
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: Could not set cycle accurate trace file\n");
+					CleanUp();
 					return SIFIVE_TRACE_DECODER_ERR;
 				}
 			}
@@ -246,6 +239,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 				rc = trace->subSrcPath(cutPath,newRoot);
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: Could not set cutPath or newRoot\n");
+					CleanUp();
 					return SIFIVE_TRACE_DECODER_ERR;
 				}
 			}
@@ -261,6 +255,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 				rc = trace->enableCTFConverter(-1,nullptr);
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: Could not set CTF file\n");
+					CleanUp();
 					return SIFIVE_TRACE_DECODER_ERR;
 				}
 			}
@@ -268,6 +263,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 	}
 	else {
 		printf("Error: must specify either simulator file, trace file, SWT trace server, properties file, or base name\n");
+		CleanUp();
 		return SIFIVE_TRACE_DECODER_ERR;
 	}
 
@@ -311,6 +307,13 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 	TraceDqr::TIMESTAMP startTime, endTime;
 
 	msgInfo = nullptr;
+
+	fp = fopen(out_file, "a");
+	if(!fp)
+	{
+		CleanUp();
+		return SIFIVE_TRACE_DECODER_CANNOT_OPEN_FILE;
+	}
 
 	do {
 		if (sim != nullptr) {
@@ -615,6 +618,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 	}
 	else {
 		printf("Error (%d) terminated trace decode\n",ec);
+		CleanUp();
 		return SIFIVE_TRACE_DECODER_ERR;
 	}
 
@@ -672,7 +676,29 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 			fprintf(fp, "%s",dst);
 		}
 	}
-	fclose(fp);
+	CleanUp();
+
+	return SIFIVE_TRACE_DECODER_OK;
+}
+
+/****************************************************************************
+     Function: CleanUp
+     Engineer: Arjun Suresh
+        Input: None
+       Output: None
+       return: None
+  Description: CleanUp Function
+  Date         Initials    Description
+2-Nov-2022     AS          Initial
+****************************************************************************/
+void SifiveDecoderInterface::CleanUp()
+{
+	if(fp != nullptr)
+	{
+		fclose(fp);
+		fp = nullptr;
+	}
+
 	if (trace != nullptr) {
 		trace->cleanUp();
 
@@ -689,8 +715,6 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 		delete vcd;
 		vcd = nullptr;
 	}
-
-	return SIFIVE_TRACE_DECODER_OK;
 }
 
 /****************************************************************************

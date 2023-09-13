@@ -154,12 +154,19 @@ private:
 	// Arch Size and Src bit Settings
 	int srcbits = 0;												// Size of Source bit fields in bits (used for multicore tracing)
 	int archSize = TySifiveTraceTargetArchSize::ARCH_GET_FROM_ELF;	// Target Architecture Size (32/64)
+
+	Trace *trace = nullptr;
+	Simulator *sim = nullptr;
+	VCD *vcd = nullptr;
+	FILE* fp = nullptr;
+
+	void CleanUp();
 public:
 	virtual TySifiveTraceDecodeError Configure(const TDecoderConfig& config);
 	// API to decode the rtd file
 	virtual TySifiveTraceDecodeError Decode(char* out_file);
 	// Class destructor
-	virtual ~SifiveDecoderInterface() {}
+	virtual ~SifiveDecoderInterface() { CleanUp(); }
 };
 
 // Function pointer typedef

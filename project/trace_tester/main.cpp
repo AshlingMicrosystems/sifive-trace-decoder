@@ -27,10 +27,10 @@
 #endif
 
 #ifdef WINDOWS
-	char TRACE_FILE[] = ".\\test_samples\\sifive_sum\\sifive_sum.rtd";
-	char ELF_FILE[] = ".\\test_samples\\sifive_sum\\sifive_sum.elf";
-	char OUT_FILE[] = ".\\test_samples\\sifive_sum\\trace_out.txt";
-	char OBJDUMP_PATH[] = "C:\\Users\\Arjun\\Downloads\\RiscFreeForIntelv22.4.2_test8\\toolchain\\riscv32-unknown-elf\\bin\\riscv32-unknown-elf-objdump.exe";
+	char TRACE_FILE[] = ".\\test_samples\\suresh\\trc_encodedFile_session_id_0_1.rtd";
+	char ELF_FILE[] = ".\\test_samples\\suresh\\sifive_sum.elf";
+	char OUT_FILE[] = ".\\test_samples\\suresh\\trace_out.txt";
+	char OBJDUMP_PATH[] = ".\\test_samples\\suresh\\riscv64-unknown-elf-objdump.exe";
 #else
 	char TRACE_FILE[] = "./test_samples/sifive_sum/sifive_sum.rtd";
 	char ELF_FILE[] = "./test_samples/sifive_sum/sifive_sum.elf";
@@ -56,6 +56,7 @@ int main()
 	config.trace_filepath = TRACE_FILE;
 	config.elf_filepath = ELF_FILE;
 	config.objdump_path = OBJDUMP_PATH;
+	config.display_trace_msg = true;
 	decoder->Configure(config);
 
 	std::cout << "Decoding ..." << std::endl;
