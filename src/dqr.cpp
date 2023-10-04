@@ -12942,7 +12942,7 @@ TraceDqr::DQErr Disassembler::getInstruction(TraceDqr::ADDRESS addr,Instruction 
 	}
 
 	Section *sp = sectionLst->getSectionByAddress(addr);
-	if (sp == nullptr) {
+	if (sp == nullptr || sp->code == nullptr) {
 		return TraceDqr::DQERR_ERR;
 	}
 
