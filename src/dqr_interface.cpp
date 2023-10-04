@@ -326,11 +326,11 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 		if (ec == TraceDqr::DQERR_OK) {
 			if(profile_flag)
 			{
-				if(trace != nullptr && msgInfo != nullptr)
+				if(trace != nullptr && instInfo != nullptr)
 				{
-					if(msgInfo->haveTimestamp)
+					//if(instInfo->haveTimestamp)
 					{
-						fprintf(fp, "%x\n", msgInfo->currentAddress);
+						fprintf(fp, "%llx %llu\n", instInfo->address, instInfo->timestamp);
 					}
 				}
 			}
