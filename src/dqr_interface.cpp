@@ -328,10 +328,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 			{
 				if(trace != nullptr && instInfo != nullptr)
 				{
-					//if(instInfo->haveTimestamp)
-					{
-						fprintf(fp, "%llx %llu\n", instInfo->address, instInfo->timestamp);
-					}
+					fprintf(fp, "%llx %llu\n", instInfo->address, instInfo->timestamp);
 				}
 			}
 			if (srcInfo != nullptr) {
