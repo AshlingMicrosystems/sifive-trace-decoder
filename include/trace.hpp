@@ -14,6 +14,8 @@
 #include <cassert>
 #include <fcntl.h>
 #include <unistd.h>
+#include <deque>
+#include <mutex>
 #ifdef WINDOWS
 #include<windows.h>
 #endif
@@ -363,7 +365,27 @@ public:
   void       dump();
 
   TraceDqr::DQErr getNumBytesInSWTQ(int &numBytes);
-
+  void setStartMsgOffset(uint32_t offset) 
+  {
+	msgOffset = offset;
+  }
+    // Function to add data to the message queue
+    TraceDqr::DQErr PushTraceData(uint8_t *p_buff, const uint64_t size)
+    {
+        if (!p_buff)
+        {
+            return TraceDqr::DQERR_ERR;
+        }
+        std::lock_guard<std::mutex> msg_queue_guard(m_msg_queue_mutex);
+        m_msg_queue.insert(m_msg_queue.end(), p_buff, p_buff + size);
+        return TraceDqr::DQERR_OK;
+    }
+    // Function to set end of data
+    void SetEndOfData()
+    {
+        std::lock_guard<std::mutex> msg_eod_guard(m_end_of_data_mutex);
+        m_end_of_data = true;
+    }  
 private:
   TraceDqr::DQErr status;
 
@@ -376,6 +398,7 @@ private:
   int           bitIndex;
   int           msgSlices;
   uint32_t      msgOffset;
+  uint32_t		msgByteIndex;
   int           pendingMsgIndex;
   uint8_t       msg[64];
   bool          eom;
@@ -383,6 +406,14 @@ private:
   int           bufferInIndex;
   int           bufferOutIndex;
   uint8_t       sockBuffer[2048];
+  uint32_t 		prev_offset = 0;
+
+  	// Mutex to sync m_msg_queue 
+	std::mutex m_msg_queue_mutex;
+	// Mutex to sync m_end_of_data 
+	std::mutex m_end_of_data_mutex;
+	std::deque<uint8_t> m_msg_queue;
+	bool m_end_of_data;
 
   TraceDqr::DQErr readBinaryMsg(bool &haveMsg);
   TraceDqr::DQErr bufferSWT();
@@ -494,7 +525,7 @@ public:
 	bool itcPerfEnable;
 	int itcPerfChannel;
 	uint32_t itcPerfMarkerValue;
-
+	uint32_t startMsgOffset;
 private:
 	TraceDqr::DQErr propertyToBool(const char *src,bool &value);
 };

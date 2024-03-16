@@ -802,7 +802,7 @@ private:
 
 class Trace {
 public:
-    Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq = 0);
+    Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq = 0, uint32_t start_msg_offset = 0);
     Trace(char *mf_ame);
     ~Trace();
     void cleanUp();
@@ -852,7 +852,9 @@ public:
 	TraceDqr::DQErr getInstructionByAddress(TraceDqr::ADDRESS addr, Instruction *instInfo,Source *srcInfo,int *flags);
 
 	TraceDqr::DQErr getNumBytesInSWTQ(int &numBytes);
-
+	void SetMsgNumAndOffset(uint32_t msg_num, uint32_t msg_offset);
+	TraceDqr::DQErr PushTraceData(uint8_t *p_buff, const uint64_t size);
+	void SetEndOfData();
 private:
 	enum state {
 		TRACE_STATE_SYNCCATE,

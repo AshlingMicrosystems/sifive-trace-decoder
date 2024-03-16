@@ -4052,6 +4052,7 @@ TraceSettings::TraceSettings()
 	startTime = -1;
 	hostName = nullptr;
 	filterControlEvents = false;
+	startMsgOffset = 0;
 }
 
 TraceSettings::~TraceSettings()
@@ -5124,7 +5125,7 @@ Trace::Trace(char *mf_name)
 	status = TraceDqr::DQERR_OK;
 }
 
-Trace::Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq)
+Trace::Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq, uint32_t start_msg_offset)
 {
 	TraceDqr::DQErr rc;
 	TraceSettings ts;
@@ -5153,6 +5154,7 @@ Trace::Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,
 	ts.addrDispFlags = addrDispFlags;
 	ts.srcBits = srcBits;
 	ts.freq = freq;
+	ts.startMsgOffset = start_msg_offset;
 
 	rc = configure(ts);
 
@@ -5242,6 +5244,7 @@ TraceDqr::DQErr Trace::configure(TraceSettings &settings)
 
 		return TraceDqr::DQERR_ERR;
 	}
+	sfp->setStartMsgOffset(settings.startMsgOffset);
 
 	if (sfp->getErr() != TraceDqr::DQERR_OK) {
 		printf("Error: Trace::Configure(): Could not open trace file '%s' for input\n",settings.tfName);
@@ -5775,6 +5778,12 @@ TraceDqr::TIMESTAMP Trace::processTS(TraceDqr::tsType tstype, TraceDqr::TIMESTAM
 	}
 
 	return ts;
+}
+
+void Trace::SetMsgNumAndOffset(uint32_t msg_num, uint32_t msg_offset)
+{
+	nm.msgNum = msg_num;
+	nm.offset = msg_offset;
 }
 
 TraceDqr::DQErr Trace::getNumBytesInSWTQ(int &numBytes)
@@ -7424,6 +7433,16 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction *instInfo,NexusMessage *msgIn
 //				if instruction object ptr is null, don't return any instruction info
 //				if message object ptr is null, don't return any message info
 //				if source code object is null, don't return source code info
+TraceDqr::DQErr Trace::PushTraceData(uint8_t *p_buff, const uint64_t size)
+{
+    return sfp ? sfp->PushTraceData(p_buff, size) : TraceDqr::DQERR_ERR;
+}
+
+void Trace::SetEndOfData()
+{
+	if(sfp)
+		sfp->SetEndOfData();
+}
 
 TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **msgInfo, Source **srcInfo)
 {
@@ -7471,6 +7490,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 	}
 
 	for (;;) {
+		//printf("\nCurrent Core State %d", state[currentCore]);
 //		need to set readNewTraceMessage where it is needed! That includes
 //		staying in the same state that expects to get another message!!
 
@@ -7523,7 +7543,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 			readNewTraceMessage = false;
 			currentCore = nm.coreId;
-
+			
 			// if set see if HTM trace message, switch to HTM mode
 
 			if (traceType != TraceDqr::TRACETYPE_HTM) {

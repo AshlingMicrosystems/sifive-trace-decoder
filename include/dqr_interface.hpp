@@ -107,6 +107,7 @@ struct TDecoderConfig
 	uint32_t src_field_size_bits = 0;
 	TraceDqr::ITCOptions itc_print_options = TraceDqr::ITC_OPT_NLS;
 	uint32_t itc_print_channel = 0;
+	uint32_t start_msg_offset = 0;
 };
 
 // Interface Class that provides access to the decoder related
@@ -161,12 +162,25 @@ private:
 	Simulator *sim = nullptr;
 	VCD *vcd = nullptr;
 	FILE* fp = nullptr;
+	uint32_t msg_num = 0;
+	uint32_t msg_offset = 0;
+	uint32_t start_msg_offset = 0;
+
+	uint32_t m_trace_start_idx = 0;
+	uint32_t m_trace_stop_idx = 0;
 
 	void CleanUp();
 public:
 	virtual TySifiveTraceDecodeError Configure(const TDecoderConfig& config);
 	// API to decode the rtd file
-	virtual TySifiveTraceDecodeError Decode(char* out_file);
+	virtual TySifiveTraceDecodeError Decode(char* out_file, uint32_t start_msg_num = 0, uint32_t start_msg_offset = 0);
+	virtual void GetMsgNumAndOffset(uint32_t &msg_num, uint32_t &msg_offset);
+	virtual void SetMsgNumAndOffset(uint32_t msg_num, uint32_t msg_offset);
+	virtual TySifiveTraceDecodeError PushTraceData(uint8_t *p_buff, const uint64_t &size);
+	virtual TySifiveTraceDecodeError DecodeBuffer(char* out_file, char* p_buff, const uint32_t size, uint32_t start_msg_num, uint32_t start_msg_offset);
+	virtual void SetTraceStartIdx(uint32_t trace_start_idx) { m_trace_start_idx = trace_start_idx; };
+	virtual void SetTraceStopIdx(uint32_t trace_stop_idx) { m_trace_stop_idx = trace_stop_idx; };
+
 	// Class destructor
 	virtual ~SifiveDecoderInterface() { CleanUp(); }
 };
