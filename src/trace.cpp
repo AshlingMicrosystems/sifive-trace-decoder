@@ -5213,12 +5213,12 @@ TraceDqr::DQErr Trace::configure(TraceSettings &settings)
 		strcpy (objdump,DEFAULTOBJDUMPNAME);
 	}
 
-	if (settings.tfName == nullptr) {
+	/*if (settings.tfName == nullptr) {
 		printf("Error: Trace::configure(): No trace file name specified\n");
 		status = TraceDqr::DQERR_ERR;
 
 		return TraceDqr::DQERR_ERR;
-	}
+	}*/
 
 	traceType = TraceDqr::TRACETYPE_BTM;
 
@@ -5232,8 +5232,8 @@ TraceDqr::DQErr Trace::configure(TraceSettings &settings)
 
 	analytics.setSrcBits(srcbits);
 
-	rtdName = new char[strlen(settings.tfName)+1];
-	strcpy(rtdName,settings.tfName);
+	//rtdName = new char[strlen(settings.tfName)+1];
+	//strcpy(rtdName,settings.tfName);
 
 	sfp = new (std::nothrow) SliceFileParser(settings.tfName,srcbits);
 

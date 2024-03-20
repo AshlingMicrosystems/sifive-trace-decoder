@@ -8942,9 +8942,9 @@ void Count::dumpCounts(int core)
 SliceFileParser::SliceFileParser(char *filename,int srcBits)
 {
 	if (filename == nullptr) {
-		printf("Error: SliceFileParser::SliceFaileParser(): No filename specified\n");
+		//printf("Error: SliceFileParser::SliceFaileParser(): No filename specified\n");
 		status = TraceDqr::DQERR_OK;
-		return;
+		//return;
 	}
 
 	srcbits = srcBits;
@@ -8969,7 +8969,7 @@ SliceFileParser::SliceFileParser(char *filename,int srcBits)
 	// first lets see if it is a windows path
 
 	bool havePath = true;
-
+#if 0
 	for (i = 0; (filename[i] != 0) && (filename[i] != ':'); i++) { /* empty */ }
 
 	if (filename[i] == ':') {
@@ -8990,7 +8990,7 @@ SliceFileParser::SliceFileParser(char *filename,int srcBits)
 			havePath = false;
 		}
 	}
-
+#endif
 	if (havePath == false) {
 		// have a server:port address
 
@@ -9084,20 +9084,20 @@ SliceFileParser::SliceFileParser(char *filename,int srcBits)
 		tfSize = 0;
 	}
 	else {
+#if 0
 		tf.open(filename, std::ios::in | std::ios::binary);
 		if (!tf) {
 			printf("Error: SliceFileParder(): could not open file %s for input\n",filename);
-			status = TraceDqr::DQERR_OPEN;
-			return;
+			//status = TraceDqr::DQERR_OPEN;
+			//return;
 		}
 		else {
 			status = TraceDqr::DQERR_OK;
+			tf.seekg (0, tf.end);
+			tfSize = tf.tellg();
+			tf.seekg (0, tf.beg);
 		}
-
-		tf.seekg (0, tf.end);
-		tfSize = tf.tellg();
-		tf.seekg (0, tf.beg);
-
+#endif
 		msgOffset = 0;
 
 		SWTsock = -1;
