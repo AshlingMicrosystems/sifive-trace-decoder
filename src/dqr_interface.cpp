@@ -921,7 +921,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 
 	msgInfo = nullptr;
 
-	fp = fopen(out_file, "a");
+	fp = fopen(out_file, "ab");
 	if(!fp)
 	{
 		CleanUp();
@@ -969,8 +969,8 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 			{
 				if(trace != nullptr && instInfo != nullptr)
 				{
-					//printf("\n%llx", instInfo->address);
-					fprintf(fp, "%llx\n", instInfo->address);
+					fprintf(fp, "\n%llx", instInfo->address);
+					//fprintf(fp, "%d %d %llx\n", msg_num, msg_offset, instInfo->address);
 				}
 			}
 			if (srcInfo != nullptr) {
