@@ -7761,7 +7761,7 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 	}
 
 	n = snprintf(dst,dst_len,"Msg # %d, ",msgNum);
-
+	n += snprintf(dst+n,dst_len-n,"Offset %d, ",offset);
 	if (level >= 3) {
 		n += snprintf(dst+n,dst_len-n,"Offset %d, ",offset);
 
@@ -8396,7 +8396,7 @@ void NexusMessage::dumpRawMessage()
 {
 	int i;
 
-	printf("Raw Message # %d: ",msgNum);
+	printf("Raw Message # %d: Offset %d: ",msgNum, offset);
 
 	for (i = 0; ((size_t)i < sizeof rawData / sizeof rawData[0]) && ((rawData[i] & 0x03) != TraceDqr::MSEO_END); i++) {
 		printf("%02x ",rawData[i]);
@@ -8941,12 +8941,14 @@ void Count::dumpCounts(int core)
 
 SliceFileParser::SliceFileParser(char *filename,int srcBits)
 {
-	if (filename == nullptr) {
-		printf("Error: SliceFileParser::SliceFaileParser(): No filename specified\n");
-		status = TraceDqr::DQERR_OK;
-		return;
+    if(filename)
+	{
+		m_read_from_file = true;
 	}
-
+	else
+	{
+		m_read_from_file = false;
+	}
 	srcbits = srcBits;
 
 	msgSlices      = 0;
@@ -8959,34 +8961,39 @@ SliceFileParser::SliceFileParser(char *filename,int srcBits)
 	bufferOutIndex = 0;
 
 	eom = false;
+    {
+        std::lock_guard<std::mutex> msg_eod_guard(m_end_of_data_mutex);
+        m_end_of_data = false;
+    }	
 
 	int i;
 
 	// first lets see if it is a windows path
 
 	bool havePath = true;
+	if(filename != nullptr)
+	{
+		for (i = 0; (filename[i] != 0) && (filename[i] != ':'); i++) { /* empty */ }
 
-	for (i = 0; (filename[i] != 0) && (filename[i] != ':'); i++) { /* empty */ }
+		if (filename[i] == ':') {
+			// see if this is a disk designator or port designator
 
-	if (filename[i] == ':') {
-		// see if this is a disk designator or port designator
+			int j;
+			int numAlpha = 0;
 
-		int j;
-		int numAlpha = 0;
+			// look for drive : (not a foolproof test, but should work
 
-		// look for drive : (not a foolproof test, but should work
+			for (j = 0; j < i; j++) {
+				if ((filename[j] >= 'a' && filename[j] <= 'z') || (filename[j] >= 'A' && filename[j] <= 'Z')) {
+					numAlpha += 1;
+				}
+			}
 
-		for (j = 0; j < i; j++) {
-			if ((filename[j] >= 'a' && filename[j] <= 'z') || (filename[j] >= 'A' && filename[j] <= 'Z')) {
-				numAlpha += 1;
+			if (numAlpha != 1) {
+				havePath = false;
 			}
 		}
-
-		if (numAlpha != 1) {
-			havePath = false;
-		}
 	}
-
 	if (havePath == false) {
 		// have a server:port address
 
@@ -9079,25 +9086,23 @@ SliceFileParser::SliceFileParser(char *filename,int srcBits)
 
 		tfSize = 0;
 	}
-	else {
-		tf.open(filename, std::ios::in | std::ios::binary);
-		if (!tf) {
-			printf("Error: SliceFileParder(): could not open file %s for input\n",filename);
-			status = TraceDqr::DQERR_OPEN;
-			return;
-		}
-		else {
-			status = TraceDqr::DQERR_OK;
-		}
-
-		tf.seekg (0, tf.end);
-		tfSize = tf.tellg();
-		tf.seekg (0, tf.beg);
-
-		msgOffset = 0;
-
-		SWTsock = -1;
+	else if(filename != nullptr) {
+			tf.open(filename, std::ios::in | std::ios::binary);
+			if (!tf) {
+				printf("Error: SliceFileParder(): could not open file %s for input\n",filename);
+				status = TraceDqr::DQERR_OPEN;
+				return;
+			}
+			else {
+				status = TraceDqr::DQERR_OK;
+			}
+				tf.seekg (0, tf.end);
+				tfSize = tf.tellg();
+				tf.seekg (0, tf.beg);
 	}
+	
+	msgOffset = 0;
+	SWTsock = -1;
 
 	status = TraceDqr::DQERR_OK;
 }
@@ -11015,7 +11020,7 @@ TraceDqr::DQErr SliceFileParser::readBinaryMsg(bool &haveMsg)
 {
 	// start by stripping off end of message or end of var bytes. These would be here in the case
 	// of a wrapped buffer, or some kind of corruption
-
+	msgOffset = prev_offset;
 	haveMsg = false;
 
 	// if doing SWT, we may have ran out of data last time before getting an entire message
@@ -11024,7 +11029,7 @@ TraceDqr::DQErr SliceFileParser::readBinaryMsg(bool &haveMsg)
 	if (pendingMsgIndex == 0) {
 		do {
 			if (SWTsock >= 0) {
-				// need a buffer to read from.
+				//// need a buffer to read from.
 
 				status = bufferSWT();
 
@@ -11042,26 +11047,49 @@ TraceDqr::DQErr SliceFileParser::readBinaryMsg(bool &haveMsg)
 					bufferOutIndex = 0;
 				}
 			}
-			else {
-				tf.read((char*)&msg[0],sizeof msg[0]);
+			else if(m_read_from_file) {		
+				tf.read((char*)&msg[0], sizeof msg[0]);
 				if (!tf) {
 					if (tf.eof()) {
 						status = TraceDqr::DQERR_EOF;
 					}
 					else {
 						status = TraceDqr::DQERR_ERR;
-
 						std::cout << "Error reading trace file\n";
 					}
-
-					tf.close();
-
-					return status;
+				tf.close();
+				return status;
+				}
+			}
+			else {
+				// If the queue is empty, wait till we receive new trace data
+				while (1)
+				{
+					std::lock_guard<std::mutex> msg_queue_guard(m_msg_queue_mutex);
+					{
+						if (m_msg_queue.empty())
+						{
+							// If end of data flag is set, exit the loop
+							std::lock_guard<std::mutex> end_of_data_guard(m_end_of_data_mutex);
+							if (m_end_of_data == true)
+								return TraceDqr::DQERR_EOF;
+						}
+						else
+						{
+							// We have some data in queue
+							// Get the first byte
+							msg[0] = m_msg_queue.front();
+							m_msg_queue.pop_front();
+							prev_offset++;
+							//printf("\n%d %d %d", msg[0], msgOffset, m_msg_queue.size());
+							break;
+						}
+					}
 				}
 			}
 
 			if ((msg[0] == 0x00) || (((msg[0] & 0x3) != TraceDqr::MSEO_NORMAL) && (msg[0] != 0xff))) {
-				printf("Info: SliceFileParser::readBinaryMsg(): Skipping: %02x\n",msg[0]);
+				printf("Info: SliceFileParser::readBinaryMsg(): Skipping: %02x\n", msg[0]);
 			}
 		} while ((msg[0] == 0x00) || ((msg[0] & 0x3) != TraceDqr::MSEO_NORMAL));
 
@@ -11071,7 +11099,7 @@ TraceDqr::DQErr SliceFileParser::readBinaryMsg(bool &haveMsg)
 	if (SWTsock >= 0) {
 		msgOffset = 0;
 	}
-	else {
+	else if(m_read_from_file) {
 		msgOffset = ((uint32_t)tf.tellg())-1;
 
 	}
@@ -11088,7 +11116,7 @@ TraceDqr::DQErr SliceFileParser::readBinaryMsg(bool &haveMsg)
 #endif // WINDOWS
 				SWTsock = -1;
 			}
-			else {
+			else if(m_read_from_file) {
 				tf.close();
 			}
 
@@ -11119,35 +11147,60 @@ TraceDqr::DQErr SliceFileParser::readBinaryMsg(bool &haveMsg)
 				bufferOutIndex = 0;
 			}
 		}
-		else {
-			tf.read((char*)&msg[pendingMsgIndex],sizeof msg[0]);
-			if (!tf) {
-				if (tf.eof()) {
-					printf("Info: SliceFileParser::readBinaryMsg(): Last message in trace file is incomplete\n");
-					if (globalDebugFlag) {
-						printf("Debug: Raw msg:");
-						for (int i = 0; i < pendingMsgIndex; i++) {
-							printf(" %02x",msg[i]);
+		else if(m_read_from_file) {
+				tf.read((char*)&msg[pendingMsgIndex], sizeof msg[0]);
+				if (!tf) {
+					if (tf.eof()) {
+						printf("Info: SliceFileParser::readBinaryMsg(): Last message in trace file is incomplete\n");
+						if (globalDebugFlag) {
+							printf("Debug: Raw msg:");
+							for (int i = 0; i < pendingMsgIndex; i++) {
+								printf(" %02x", msg[i]);
+							}
+							printf("\n");
 						}
-						printf("\n");
+						status = TraceDqr::DQERR_EOF;
 					}
-					status = TraceDqr::DQERR_EOF;
+					else {
+						status = TraceDqr::DQERR_ERR;
+
+						std::cout << "Error reading trace file\n";
+					}
+
+					tf.close();
+
+					return status;
 				}
-				else {
-					status = TraceDqr::DQERR_ERR;
-
-					std::cout << "Error reading trace file\n";
-				}
-
-				tf.close();
-
-				return status;
 			}
-		}
+			else
+			{
+		        while (1)
+        		{
+	                std::lock_guard<std::mutex> msg_queue_guard(m_msg_queue_mutex);
+	                {
+	                    if (m_msg_queue.empty())
+	                    {
+	                        // If end of data flag is set, exit the loop
+	                        std::lock_guard<std::mutex> end_of_data_guard(m_end_of_data_mutex);
+	                        if (m_end_of_data == true)
+	                            return TraceDqr::DQERR_EOF;
+	                    }
+	                    else
+	                    {
+	                        // We have some data in queue
+	                        // Get the first byte
+	                        msg[pendingMsgIndex] = m_msg_queue.front();
+	                        m_msg_queue.pop_front();
+	                        prev_offset++;
+	                        break;
+	                    }
+	                }
+        		}
+			}
 
 		if ((msg[pendingMsgIndex] & 0x03) == TraceDqr::MSEO_END) {
 			done = true;
-			msgSlices = pendingMsgIndex+1;
+			msgSlices = pendingMsgIndex + 1;
 		}
 
 		pendingMsgIndex += 1;

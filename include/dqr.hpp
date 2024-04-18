@@ -826,7 +826,7 @@ public:
 		TF_TRACEINFO   = 0x10,
 	};
 	TraceDqr::DQErr getStatus() { return status; }
-	TraceDqr::DQErr NextInstruction(Instruction **instInfo, NexusMessage **msgInfo, Source **srcInfo);
+	TraceDqr::DQErr NextInstruction(Instruction **instInfo, NexusMessage **msgInfo, Source **srcInfo, NexusMessage **nm_out = NULL);
 	TraceDqr::DQErr NextInstruction(Instruction *instInfo, NexusMessage *msgInfo, Source *srcInfo, int *flags);
 
 	TraceDqr::DQErr getTraceFileOffset(int &size,int &offset);
@@ -853,6 +853,8 @@ public:
 
 	TraceDqr::DQErr getNumBytesInSWTQ(int &numBytes);
 
+	TraceDqr::DQErr PushTraceData(uint8_t *p_buff, const uint64_t size);
+	void SetEndOfData();
 private:
 	enum state {
 		TRACE_STATE_SYNCCATE,

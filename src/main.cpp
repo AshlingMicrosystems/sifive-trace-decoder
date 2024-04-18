@@ -831,6 +831,7 @@ int main(int argc, char *argv[])
 
 	Instruction *instInfo;
 	NexusMessage *msgInfo;
+	NexusMessage *nm;
 	Source *srcInfo;
 	char dst[10000];
 	int instlevel = 1;
@@ -853,7 +854,7 @@ int main(int argc, char *argv[])
 			ec = vcd->NextInstruction(&instInfo,&srcInfo);
 		}
 		else {
-			ec = trace->NextInstruction(&instInfo,&msgInfo,&srcInfo);
+			ec = trace->NextInstruction(&instInfo,&msgInfo,&srcInfo,&nm);
 		}
 
 		if (ec == TraceDqr::DQERR_OK) {

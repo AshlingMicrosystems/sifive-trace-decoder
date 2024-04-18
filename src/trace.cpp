@@ -5211,12 +5211,7 @@ TraceDqr::DQErr Trace::configure(TraceSettings &settings)
 		strcpy (objdump,DEFAULTOBJDUMPNAME);
 	}
 
-	if (settings.tfName == nullptr) {
-		printf("Error: Trace::configure(): No trace file name specified\n");
-		status = TraceDqr::DQERR_ERR;
 
-		return TraceDqr::DQERR_ERR;
-	}
 
 	traceType = TraceDqr::TRACETYPE_BTM;
 
@@ -5229,9 +5224,11 @@ TraceDqr::DQErr Trace::configure(TraceSettings &settings)
 	}
 
 	analytics.setSrcBits(srcbits);
-
-	rtdName = new char[strlen(settings.tfName)+1];
-	strcpy(rtdName,settings.tfName);
+	if (settings.tfName != nullptr)
+	{
+		rtdName = new char[strlen(settings.tfName)+1];
+		strcpy(rtdName,settings.tfName);
+	}
 
 	sfp = new (std::nothrow) SliceFileParser(settings.tfName,srcbits);
 
@@ -5776,6 +5773,7 @@ TraceDqr::TIMESTAMP Trace::processTS(TraceDqr::tsType tstype, TraceDqr::TIMESTAM
 
 	return ts;
 }
+
 
 TraceDqr::DQErr Trace::getNumBytesInSWTQ(int &numBytes)
 {
@@ -7424,8 +7422,18 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction *instInfo,NexusMessage *msgIn
 //				if instruction object ptr is null, don't return any instruction info
 //				if message object ptr is null, don't return any message info
 //				if source code object is null, don't return source code info
+TraceDqr::DQErr Trace::PushTraceData(uint8_t *p_buff, const uint64_t size)
+{
+    return sfp ? sfp->PushTraceData(p_buff, size) : TraceDqr::DQERR_ERR;
+}
 
-TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **msgInfo, Source **srcInfo)
+void Trace::SetEndOfData()
+{
+	if(sfp)
+		sfp->SetEndOfData();
+}
+
+TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **msgInfo, Source **srcInfo, NexusMessage **nm_out)
 {
 	if (sfp == nullptr) {
 		printf("Error: Trace::NextInstructin(): Null sfp object\n");
@@ -7471,6 +7479,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 	}
 
 	for (;;) {
+		//printf("\nCurrent Core State %d", state[currentCore]);
 //		need to set readNewTraceMessage where it is needed! That includes
 //		staying in the same state that expects to get another message!!
 
@@ -7523,7 +7532,9 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 			readNewTraceMessage = false;
 			currentCore = nm.coreId;
-
+			if(*nm_out != NULL)
+				*nm_out = &nm;
+			
 			// if set see if HTM trace message, switch to HTM mode
 
 			if (traceType != TraceDqr::TRACETYPE_HTM) {

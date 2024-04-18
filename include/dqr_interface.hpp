@@ -162,11 +162,18 @@ private:
 	VCD *vcd = nullptr;
 	FILE* fp = nullptr;
 
+	uint32_t m_trace_start_idx = 0;
+	uint32_t m_trace_stop_idx = 0;
+
 	void CleanUp();
 public:
 	virtual TySifiveTraceDecodeError Configure(const TDecoderConfig& config);
 	// API to decode the rtd file
 	virtual TySifiveTraceDecodeError Decode(char* out_file);
+	virtual TySifiveTraceDecodeError PushTraceData(uint8_t *p_buff, const uint64_t &size);
+	virtual TySifiveTraceDecodeError DecodeBuffer(char* out_file, char* p_buff, const uint32_t size);
+    virtual void SetTraceStartIdx(uint32_t trace_start_idx) { m_trace_start_idx = trace_start_idx; };
+    virtual void SetTraceStopIdx(uint32_t trace_stop_idx) { m_trace_stop_idx = trace_stop_idx; };
 	// Class destructor
 	virtual ~SifiveDecoderInterface() { CleanUp(); }
 };
