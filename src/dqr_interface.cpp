@@ -963,7 +963,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 			{
 				if(trace != nullptr && instInfo != nullptr)
 				{
-					fprintf(fp, "\n%llx", instInfo->address);
+					fprintf(fp, "%llx\n", instInfo->address);
 					//fprintf(fp, "%d %d %llx\n", msg_num, msg_offset, instInfo->address);
 				}
 			}
