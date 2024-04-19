@@ -9151,6 +9151,25 @@ TraceDqr::DQErr SliceFileParser::getNumBytesInSWTQ(int &numBytes)
 	return TraceDqr::DQERR_OK;
 }
 
+// Function to add data to the message queue
+TraceDqr::DQErr SliceFileParser::PushTraceData(uint8_t *p_buff, const uint64_t size)
+{
+	if (!p_buff)
+	{
+		return TraceDqr::DQERR_ERR;
+	}
+	std::lock_guard<std::mutex> msg_queue_guard(m_msg_queue_mutex);
+	m_msg_queue.insert(m_msg_queue.end(), p_buff, p_buff + size);
+	return TraceDqr::DQERR_OK;
+}
+
+// Function to set end of data
+void SliceFileParser::SetEndOfData()
+{
+	std::lock_guard<std::mutex> msg_eod_guard(m_end_of_data_mutex);
+	m_end_of_data = true;
+}  
+
 TraceDqr::DQErr SliceFileParser::getFileOffset(int &size,int &offset)
 {
 	if (!tf.is_open()) {

@@ -1399,10 +1399,54 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Configure(const TDecoderConfig&
 	return SIFIVE_TRACE_DECODER_OK;
 }
 
-TySifiveTraceDecodeError SifiveDecoderInterface::PushTraceData(uint8_t *p_buff, const uint64_t& size)
+/****************************************************************************
+     Function: PushTraceData
+     Engineer: Arjun Suresh
+        Input: p_buff - Pointer to data buffer
+		       size - Total size in bytes of the data
+       Output: None
+       return: TySifiveTraceDecodeError
+  Description: Function to push data to the msg queue buffer
+  Date         Initials    Description
+2-Nov-2022     AS          Initial
+****************************************************************************/
+TySifiveTraceDecodeError SifiveDecoderInterface::PushTraceData(uint8_t *p_buff, const uint64_t size)
 {
     return (trace->PushTraceData(p_buff, size) == TraceDqr::DQERR_OK) ? SIFIVE_TRACE_DECODER_OK : SIFIVE_TRACE_DECODER_ERR;
 }
+
+/****************************************************************************
+     Function: SetTraceStartIdx
+     Engineer: Arjun Suresh
+        Input: trace_start_idx - Starting trace byte offset
+       Output: None
+       return: None
+  Description: Function to set the byte offset from which trace is written
+               to file
+  Date         Initials    Description
+2-Nov-2022     AS          Initial
+****************************************************************************/
+void SifiveDecoderInterface::SetTraceStartIdx(const uint64_t trace_start_idx) 
+{ 
+	m_trace_start_idx = trace_start_idx; 
+}
+
+/****************************************************************************
+     Function: SetTraceStopIdx
+     Engineer: Arjun Suresh
+        Input: trace_stop_idx - Ending trace byte offset
+       Output: None
+       return: None
+  Description: Function to set the byte offset at which trace written
+               to file is stoppped
+  Date         Initials    Description
+2-Nov-2022     AS          Initial
+****************************************************************************/
+void SifiveDecoderInterface::SetTraceStopIdx(const uint64_t trace_stop_idx) 
+{ 
+	m_trace_stop_idx = trace_stop_idx; 
+};
+
 /****************************************************************************
      Function: GetSifiveDecoderInterface
      Engineer: Arjun Suresh

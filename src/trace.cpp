@@ -7412,16 +7412,6 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction *instInfo,NexusMessage *msgIn
 	return ec;
 }
 
-//NextInstruction() want to return address, instruction, trace message if any, label+offset for instruction, target of instruciton
-//		source code for instruction (file, function, line)
-//
-//		return instruction object (include label informatioon)
-//		return message object
-//		return source code object//
-//
-//				if instruction object ptr is null, don't return any instruction info
-//				if message object ptr is null, don't return any message info
-//				if source code object is null, don't return source code info
 TraceDqr::DQErr Trace::PushTraceData(uint8_t *p_buff, const uint64_t size)
 {
     return sfp ? sfp->PushTraceData(p_buff, size) : TraceDqr::DQERR_ERR;
@@ -7433,6 +7423,16 @@ void Trace::SetEndOfData()
 		sfp->SetEndOfData();
 }
 
+//NextInstruction() want to return address, instruction, trace message if any, label+offset for instruction, target of instruciton
+//		source code for instruction (file, function, line)
+//
+//		return instruction object (include label informatioon)
+//		return message object
+//		return source code object//
+//
+//				if instruction object ptr is null, don't return any instruction info
+//				if message object ptr is null, don't return any message info
+//				if source code object is null, don't return source code info
 TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **msgInfo, Source **srcInfo, NexusMessage **nm_out)
 {
 	if (sfp == nullptr) {
