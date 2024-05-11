@@ -68,6 +68,21 @@ static const char *stripPath(const char *prefix, const char *srcpath)
 }
 
 /****************************************************************************
+     Function: ~SifiveDecoderInterface
+     Engineer: Arjun Suresh
+        Input: None
+       Output: None
+       return: None
+  Description: Destructor
+  Date         Initials    Description
+2-Nov-2022     AS          Initial
+****************************************************************************/
+SifiveDecoderInterface::~SifiveDecoderInterface()
+{
+	CleanUp();
+}
+
+/****************************************************************************
      Function: Decode
      Engineer: Arjun Suresh
         Input: tf_name - The full path to the encode trace rtd file
@@ -900,10 +915,10 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 //
 //	should look at source code display!
 
-	Instruction *instInfo;
-	NexusMessage *msgInfo;
-	NexusMessage *nm;
-	Source *srcInfo;
+	Instruction *instInfo = nullptr;
+	NexusMessage *msgInfo = nullptr;
+	NexusMessage *nm = nullptr;
+	Source *srcInfo = nullptr;
 	char dst[10000];
 	int instlevel = 1;
 	const char *lastSrcFile = nullptr;
@@ -924,10 +939,9 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 		return SIFIVE_TRACE_DECODER_CANNOT_OPEN_FILE;
 	}
 
-	printf("\nPushing Trace Data");
 	trace->PushTraceData((uint8_t*)p_buff, size);
-	printf("\nSetting EOD");
 	trace->SetEndOfData();
+
 	bool out_to_file = false;
 
 	do {
@@ -945,14 +959,12 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 				{
 					if(nm->offset < m_trace_start_idx || nm->offset > m_trace_stop_idx)
 					{
-						//printf("\nSkipping");
 						out_to_file = false;
 					}
 					else
 					{
 						out_to_file = true;
 					}
-					//printf("\n%d %d %d %d", msgInfo->offset, m_trace_start_idx, m_trace_stop_idx, out_to_file);
 				}
 			}
 		}
@@ -964,7 +976,6 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 				if(trace != nullptr && instInfo != nullptr)
 				{
 					fprintf(fp, "%llx\n", instInfo->address);
-					//fprintf(fp, "%d %d %llx\n", msg_num, msg_offset, instInfo->address);
 				}
 			}
 			if (srcInfo != nullptr) {
@@ -1254,7 +1265,6 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 		if (firstPrint == false) {
 			fprintf(fp, "\n");
 		}
-		//fprintf(fp, "End of Trace File\n");
 	}
 	else {
 		printf("Error (%d) terminated trace decode\n",ec);
@@ -1460,4 +1470,25 @@ void SifiveDecoderInterface::SetTraceStopIdx(const uint64_t trace_stop_idx)
 SifiveDecoderInterface* GetSifiveDecoderInterface()
 {
 	return new SifiveDecoderInterface;
+}
+
+/****************************************************************************
+     Function: DeleteSifiveDecoderInterface
+     Engineer: Arjun Suresh
+        Input: None
+       Output: None
+       return: None
+  Description: Function to delete the decoder interface class object
+               Memory allocated within a DLL should always be deleted
+               within it.
+  Date         Initials    Description
+2-Nov-2022     AS          Initial
+****************************************************************************/
+void DeleteSifiveDecoderInterface(SifiveDecoderInterface** p_sifive_decoder_intf)
+{
+	if(*p_sifive_decoder_intf)
+	{
+		delete *p_sifive_decoder_intf;
+		*p_sifive_decoder_intf = NULL;
+	}
 }

@@ -165,7 +165,7 @@ private:
 	uint64_t m_trace_start_idx = 0;	// Trace output will be generated only after this byte offset 
 	uint64_t m_trace_stop_idx = 0;	// Trace output will be generated only before this byte offset 
 
-	void CleanUp();
+	virtual void CleanUp();
 public:
 	virtual TySifiveTraceDecodeError Configure(const TDecoderConfig& config);
 	// API to decode the rtd file
@@ -175,11 +175,15 @@ public:
     virtual void SetTraceStartIdx(const uint64_t trace_start_idx);
     virtual void SetTraceStopIdx(const uint64_t trace_stop_idx);
 	// Class destructor
-	virtual ~SifiveDecoderInterface() { CleanUp(); }
+	virtual ~SifiveDecoderInterface();
 };
 
 // Function pointer typedef
 typedef SifiveDecoderInterface* (*fpGetSifiveDecoderInterface)();
+typedef void (*fpDeleteSifiveDecoderInterface)(SifiveDecoderInterface**);
 
 // Exported C API function that returns the pointer to the Sifive decoder class instance
 extern "C" DLLEXPORTEDAPI SifiveDecoderInterface* GetSifiveDecoderInterface();
+// Exported C API function that deletes the pointer to the Sifive decoder class instance
+extern "C" DLLEXPORTEDAPI void DeleteSifiveDecoderInterface(SifiveDecoderInterface**);
+

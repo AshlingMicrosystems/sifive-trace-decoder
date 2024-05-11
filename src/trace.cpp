@@ -7532,8 +7532,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 			readNewTraceMessage = false;
 			currentCore = nm.coreId;
-			if(*nm_out != NULL)
-				*nm_out = &nm;
+			*nm_out = &nm;
 			
 			// if set see if HTM trace message, switch to HTM mode
 
