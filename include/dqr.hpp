@@ -855,6 +855,7 @@ public:
 
 	TraceDqr::DQErr PushTraceData(uint8_t *p_buff, const uint64_t size);
 	void SetEndOfData();
+	void SetFilePoiter(FILE* fp);
 private:
 	enum state {
 		TRACE_STATE_SYNCCATE,
@@ -867,6 +868,7 @@ private:
 		TRACE_STATE_ERROR
 	};
 
+	FILE* m_fp = nullptr;
 	TraceDqr::DQErr        status;
 	TraceDqr::TraceType	   traceType;
 	class SliceFileParser *sfp;

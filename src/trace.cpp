@@ -7423,6 +7423,10 @@ void Trace::SetEndOfData()
 		sfp->SetEndOfData();
 }
 
+void Trace::SetFilePoiter(FILE* fp)
+{
+	m_fp = fp;
+}
 //NextInstruction() want to return address, instruction, trace message if any, label+offset for instruction, target of instruciton
 //		source code for instruction (file, function, line)
 //
@@ -7522,6 +7526,8 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				}
 
 				if (haveMsg == false) {
+					if(m_fp)
+						fprintf(m_fp, "\nTrace: %s\n", nm.messageToString(3).c_str());
 					lastTime[currentCore] = 0;
 					currentAddress[currentCore] = 0;
 	                lastFaddr[currentCore] = 0;

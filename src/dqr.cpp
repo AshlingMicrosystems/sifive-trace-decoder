@@ -7761,7 +7761,7 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 	}
 
 	n = snprintf(dst,dst_len,"Msg # %d, ",msgNum);
-	n += snprintf(dst+n,dst_len-n,"Offset %d, ",offset);
+
 	if (level >= 3) {
 		n += snprintf(dst+n,dst_len-n,"Offset %d, ",offset);
 
@@ -11492,6 +11492,7 @@ TraceDqr::DQErr SliceFileParser::readNextTraceMsg(NexusMessage &nm,Analytics &an
 			break;
 		default:
 			std::cout << "Error: readNextTraceMsg(): Unknown TCODE " << std::hex << int(tcode) << std::dec << std::endl;
+			nm.tcode = TraceDqr::TCODE_UNDEFINED;
 			rc = TraceDqr::DQERR_ERR;
 		}
 	}

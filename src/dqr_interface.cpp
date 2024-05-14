@@ -938,7 +938,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 		CleanUp();
 		return SIFIVE_TRACE_DECODER_CANNOT_OPEN_FILE;
 	}
-
+	trace->SetFilePoiter(fp);
 	trace->PushTraceData((uint8_t*)p_buff, size);
 	trace->SetEndOfData();
 
