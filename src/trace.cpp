@@ -7526,8 +7526,11 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				}
 
 				if (haveMsg == false) {
-					if(m_fp)
-						fprintf(m_fp, "\nTrace: %s\n", nm.messageToString(3).c_str());
+					if(globalDebugFlag)
+					{
+						if(m_fp)
+							fprintf(m_fp, "\nTrace: %s\n", nm.messageToString(3).c_str());
+					}
 					lastTime[currentCore] = 0;
 					currentAddress[currentCore] = 0;
 	                lastFaddr[currentCore] = 0;
