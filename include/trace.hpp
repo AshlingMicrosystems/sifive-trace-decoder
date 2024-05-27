@@ -200,8 +200,8 @@ private:
 	int cachedSymIndex;
 
 	long      numSyms;
-    Sym      *symLst;
-    Sym     **symPtrArray;
+    Sym      *symLst = nullptr;
+    Sym     **symPtrArray = nullptr;
 
     TraceDqr::DQErr fixupFunctionSizes();
 };

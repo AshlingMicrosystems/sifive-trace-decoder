@@ -1579,7 +1579,7 @@ TraceDqr::DQErr ObjDump::execObjDump(const char *elfName,const char *objdumpPath
     strcpy(objdump,DEFAULTOBJDUMPNAME);
   }
   else {
-    strcpy(objdump,objdumpPath);
+	strcpy(objdump,objdumpPath);
   }
 
   rc = findObjDump(objdump,foundExec);
@@ -1641,19 +1641,16 @@ TraceDqr::DQErr ObjDump::execObjDump(const char *elfName,const char *objdumpPath
       return TraceDqr::DQERR_ERR;
     }
 
-    const char * args[7];
+    char command[512];
+    char elf[512];
 
-    args[0] = objdump;
-    args[1] = "-t";
-    args[2] = "-d";
-    args[3] = "-h";
-    args[4] = "-l";
-    args[5] = elfName;
-    args[6] = NULL;
+    strcpy(command, objdump);
+    strcpy(elf, elfName);
 
-    execvp(args[0],(char * const *)args);
+    char* argument_list[] = {"-t", "-d", "-h", "-l", elf, NULL};
 
-    printf("Error: execv(): failed\n");
+	execvp(command, argument_list);
+	printf("Error: execv(): failed\n");
 
     close(stdoutPipefd[1]);
 
