@@ -261,7 +261,7 @@ private:
 #endif
 		TraceDqr::DQErr execObjDump(const char *elfName,const char *objdumpPath);
 		TraceDqr::DQErr fillPipeBuffer();
-		objDumpTokenType getNextLex(char *lex);
+		objDumpTokenType getNextLex(char *lex, bool treat_space_as_lex = true);
 		bool isWSLookahead();
 		bool isStringAHexNumber(char *s,uint64_t &n);
 		bool isStringADecNumber(char *s,uint64_t &n);

@@ -1512,7 +1512,8 @@ TraceDqr::DQErr ObjDump::execObjDump(const char *elfName,const char *objdumpPath
 	  return TraceDqr::DQERR_ERR;
   }
 
-  sprintf(cmd,"%s -t -d -h -l %s",objdump,elfName);
+  
+  sprintf(cmd,"\"%s\" -t -d -h -l \"%s\"",objdump,elfName);
 
 //  printf("cmd: '%s'\n",cmd);
 
@@ -1765,7 +1766,7 @@ bool ObjDump::isWSLookahead()
 	return false;
 }
 
-ObjDump::objDumpTokenType ObjDump::getNextLex(char *lex)
+ObjDump::objDumpTokenType ObjDump::getNextLex(char *lex, bool treat_space_as_lex)
 {
     TraceDqr::DQErr rc;
     int haveWS = 1;
@@ -1841,7 +1842,24 @@ ObjDump::objDumpTokenType ObjDump::getNextLex(char *lex)
             char c;
             c = pipeBuffer[pipeIndex];
             switch(c) {
-            case ' ':
+			case ' ':
+			{
+				// Is space is not treated as lex
+				// add the space character to lex buffer
+				if(!treat_space_as_lex)
+				{
+					lex[i] = c;
+					i += 1;
+					pipeIndex += 1;
+				}
+				else
+				{
+					// If space is treated as lex token
+					// set haveLex = 1 and break
+					haveLex = 1;
+				}
+			}
+			break;
             case '\t':
             case '\r':
             case '\n':
@@ -1986,7 +2004,7 @@ TraceDqr::DQErr ObjDump::parseElfName(char *elfName,enum elfType &et)
   // get the elf file name
 
   for (int scanning = 1; scanning; ) {
-    type = getNextLex(elfName);
+    type = getNextLex(elfName, false);
 
     switch (type) {
     case odtt_eol:
@@ -2014,7 +2032,7 @@ TraceDqr::DQErr ObjDump::parseElfName(char *elfName,enum elfType &et)
 
   char lex[256];
 
-  type = getNextLex(lex);
+  type = getNextLex(lex, false);
   if (type != odtt_colon) {
     printf("Error: parseElfName(): expected ':', %d\n",type);
     return TraceDqr::DQERR_ERR;
@@ -2026,7 +2044,7 @@ TraceDqr::DQErr ObjDump::parseElfName(char *elfName,enum elfType &et)
   if (isWSLookahead() == false) {
 	  // The colon we found must be a drive specify. Get rest of elf name
 	  for (int scanning = 1; scanning; ) {
-	    type = getNextLex(lex);
+	    type = getNextLex(lex, false);
 
 	    switch (type) {
 	    case odtt_eol:
@@ -2055,7 +2073,7 @@ TraceDqr::DQErr ObjDump::parseElfName(char *elfName,enum elfType &et)
 	  strcat(elfName,":");
 	  strcat(elfName,lex);
 
-	  type = getNextLex(lex);
+	  type = getNextLex(lex, false);
 	  if (type != odtt_colon) {
 	    printf("Error: parseElfName(): expected ':', %d\n",type);
 	    return TraceDqr::DQERR_ERR;
