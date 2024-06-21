@@ -1081,36 +1081,34 @@ TraceDqr::DQErr Symtab::lookupSymbolByAddress(TraceDqr::ADDRESS addr,Sym *&sym)
 {
 	if (addr == 0) {
 		sym = nullptr;
-
 		return TraceDqr::DQERR_ERR;
 	}
 
 	// check for a cache hit
-
 	if ((addr >= cachedSymAddr) && (addr < (cachedSymAddr + cachedSymSize))) {
-			sym = symPtrArray[cachedSymIndex];
-
-			return TraceDqr::DQERR_OK;
+		if (cachedSymIndex < 0 || cachedSymIndex >= numSyms) {
+			sym = nullptr;
+			return TraceDqr::DQERR_ERR;
+		}
+		sym = symPtrArray[cachedSymIndex];
+		return TraceDqr::DQERR_OK;
 	}
 
 	// not in cache, go look for it
-
-	// maybe use a binary search in the future - maybe not. bsearch will not always get the first
-
 	int found = -1;
-
-	for (int i = 0;(found == -1) && (i < numSyms); i++) {
-	    if ((addr >= symPtrArray[i]->address) && (addr < (symPtrArray[i]->address + symPtrArray[i]->size))) {
-	    	found = i;
-	    }
+	for (int i = 0; (found == -1) && (i < numSyms); i++) {
+		if (symPtrArray[i] == nullptr) {
+			continue;
+		}
+		if ((addr >= symPtrArray[i]->address) && (addr < (symPtrArray[i]->address + symPtrArray[i]->size))) {
+			found = i;
+		}
 	}
 
 	if (found >= 0) {
 		// found - cache it
-
 		cachedSymIndex = found;
 		cachedSymAddr = symPtrArray[found]->address;
-
 		sym = symPtrArray[found];
 	}
 	else {
