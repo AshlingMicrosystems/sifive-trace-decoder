@@ -7994,7 +7994,12 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				}
 
 				if (srcInfo != nullptr) {
-					Disassemble(currentAddress[currentCore]);
+					rc = Disassemble(currentAddress[currentCore]);
+					if (rc != TraceDqr::DQERR_OK) {
+						state[currentCore] = TRACE_STATE_GETFIRSTSYNCMSG;
+						readNewTraceMessage = true;
+						break;
+					}
 
 					sourceInfo.coreId = currentCore;
 					*srcInfo = &sourceInfo;
