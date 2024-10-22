@@ -1047,7 +1047,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 						}
 						else
 						{
-							fprintf(fp, "\n");
+							//fprintf(fp, "\n"); TEMP:
 						}
 					}
 				}

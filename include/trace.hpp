@@ -411,6 +411,7 @@ private:
   TraceDqr::DQErr parseCorrelation(NexusMessage &nm,Analytics &analytics);
   TraceDqr::DQErr parseAuxAccessWrite(NexusMessage &nm,Analytics &analytics);
   TraceDqr::DQErr parseDataAcquisition(NexusMessage &nm,Analytics &analytics);
+  TraceDqr::DQErr parseRepeatBranch(NexusMessage &nm,Analytics &analytics);
   TraceDqr::DQErr parseOwnershipTrace(NexusMessage &nm,Analytics &analytics);
   TraceDqr::DQErr parseError(NexusMessage &nm,Analytics &analytics);
   TraceDqr::DQErr parseIndirectHistory(NexusMessage &nm,Analytics &analytics);
@@ -418,6 +419,7 @@ private:
   TraceDqr::DQErr parseResourceFull(NexusMessage &nm,Analytics &analytics);
   TraceDqr::DQErr parseICT(NexusMessage &nm,Analytics &analytics);
   TraceDqr::DQErr parseICTWS(NexusMessage &nm,Analytics &analytics);
+  TraceDqr::DQErr parseTrapInfo(NexusMessage &nm,Analytics &analytics);
 };
 
 class propertiesParser {
