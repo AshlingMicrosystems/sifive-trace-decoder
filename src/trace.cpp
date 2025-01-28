@@ -5755,24 +5755,24 @@ TraceDqr::DQErr Trace::setTSSize(int size)
 TraceDqr::TIMESTAMP Trace::processTS(TraceDqr::tsType tstype, TraceDqr::TIMESTAMP lastTs, TraceDqr::TIMESTAMP newTs)
 {
 	TraceDqr::TIMESTAMP ts;
+	//printf("\nProcess Ts Type [%d] TS Size [%d] Last TS [%llu] New TS [%llu]\n", tstype, tsSize, lastTs, newTs);
+    if (tstype == TraceDqr::TS_full) {
+        // Reconstruct the full absolute timestamp by combining newTs with upper bits of lastTs
+        ts = newTs + (lastTs & (~((((TraceDqr::TIMESTAMP)1) << tsSize) - 1)));
+    } else if (tstype == TraceDqr::TS_rel && lastTs != 0) {
+        // Add relative offset to the last timestamp
+        ts = lastTs + newTs;
+    } else {
+        // If lastTs is not valid or unknown type, return 0
+        ts = 0;
+    }
 
-	if (tstype == TraceDqr::TS_full) {
-		// add in the wrap from previous timestamps
-		ts = newTs + (lastTs & (~((((TraceDqr::TIMESTAMP)1) << tsSize)-1)));
-	}
-	else if (lastTs != 0) {
-		ts = lastTs ^ newTs;
-	}
-	else {
-		ts = 0;
-	}
+    if (ts < lastTs) {
+        // Adjust for counter wraparound
+        ts += ((TraceDqr::TIMESTAMP)1) << tsSize;
+    }
 
-	if (ts < lastTs) {
-		// adjust for wrap
-		ts += ((TraceDqr::TIMESTAMP)1) << tsSize;
-	}
-
-	return ts;
+    return ts;
 }
 
 
@@ -7509,7 +7509,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 		if (readNewTraceMessage != false) {
 			do {
 				rc = sfp->readNextTraceMsg(nm,analytics,haveMsg);
-				printf("TEMP: TCODE is %d\n", nm.tcode);
+				//printf("TEMP: TCODE is %d\n", nm.tcode);
 
 				if (rc != TraceDqr::DQERR_OK) {
 					// have an error. either EOF, or error
@@ -7625,7 +7625,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			}
 		}
 
-		printf("TEMP: Current state is %d\n", state[currentCore]);
+		//printf("TEMP: Current state is %d\n", state[currentCore]);
 		switch (state[currentCore]) {
 		case TRACE_STATE_SYNCCATE:	// Looking for a CA trace sync
 			// printf("TRACE_STATE_SYNCCATE\n");
