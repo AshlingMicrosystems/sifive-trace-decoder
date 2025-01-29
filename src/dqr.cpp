@@ -3654,11 +3654,11 @@ ElfReader::~ElfReader()
 		symtab = nullptr;
 	}
 
-	while (codeSectionLst != nullptr) {
+	/*while (codeSectionLst != nullptr) {
 		Section *nextSection = codeSectionLst->next;
 		delete codeSectionLst;
 		codeSectionLst = nextSection;
-	}
+	}*/
 }
 
 TraceDqr::DQErr ElfReader::fixupSourceFiles(Section *sections,Sym *syms)
