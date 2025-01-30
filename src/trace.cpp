@@ -5754,27 +5754,35 @@ TraceDqr::DQErr Trace::setTSSize(int size)
 
 TraceDqr::TIMESTAMP Trace::processTS(TraceDqr::tsType tstype, TraceDqr::TIMESTAMP lastTs, TraceDqr::TIMESTAMP newTs)
 {
-	TraceDqr::TIMESTAMP ts;
-	//printf("\nProcess Ts Type [%d] TS Size [%d] Last TS [%llu] New TS [%llu]\n", tstype, tsSize, lastTs, newTs);
+    TraceDqr::TIMESTAMP ts;
+    //printf("\nProcess Ts Type [%d] TS Size [%d] Last TS [%llu] New TS [%llu]\n", tstype, tsSize, lastTs, newTs);
+
     if (tstype == TraceDqr::TS_full) {
-        // Reconstruct the full absolute timestamp by combining newTs with upper bits of lastTs
-        ts = newTs + (lastTs & (~((((TraceDqr::TIMESTAMP)1) << tsSize) - 1)));
-    } else if (tstype == TraceDqr::TS_rel && lastTs != 0) {
+        // If newTs is already a full 64-bit timestamp, use it directly
+        if (tsSize == 63) {
+            ts = newTs;  
+        } else {
+            // Reconstruct full absolute timestamp using upper bits of lastTs
+            ts = newTs + (lastTs & ~((1ULL << tsSize) - 1));
+            
+            // Apply wraparound correction only when needed
+            if (newTs < (lastTs & ((1ULL << tsSize) - 1))) {
+                ts += (1ULL << tsSize);
+            }
+        }
+    } 
+    else if (tstype == TraceDqr::TS_rel && lastTs != 0) {
         // Add relative offset to the last timestamp
         ts = lastTs + newTs;
-    } else {
+    } 
+    else {
         // If lastTs is not valid or unknown type, return 0
-        ts = 0;
-    }
-
-    if (ts < lastTs) {
-        // Adjust for counter wraparound
-        ts += ((TraceDqr::TIMESTAMP)1) << tsSize;
+        printf("Warning: Invalid timestamp type [%d] or uninitialized lastTs.\n", tstype);
+        return 0;
     }
 
     return ts;
 }
-
 
 TraceDqr::DQErr Trace::getNumBytesInSWTQ(int &numBytes)
 {
