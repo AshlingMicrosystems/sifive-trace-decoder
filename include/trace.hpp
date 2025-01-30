@@ -241,7 +241,6 @@ private:
 			line_t_diss,
 			line_t_path,
 			line_t_func,
-			line_t_unknown,
 		};
 
 		TraceDqr::DQErr status;

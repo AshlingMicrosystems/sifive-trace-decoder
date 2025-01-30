@@ -2987,8 +2987,7 @@ TraceDqr::DQErr ObjDump::parseDisassemblyList(objDumpTokenType &nextType,char *n
 		  rc = parseFileOrLabelOrDisassembly(lineType,lex,length,value);
           if (rc != TraceDqr::DQERR_OK) {
               printf("Error: parseDisassemblyList(): parseDisassembly() failed\n");
-              //return TraceDqr::DQERR_ERR;
-              lineType = line_t_unknown;
+              return TraceDqr::DQERR_ERR;
           }
 
 		  switch (lineType) {
