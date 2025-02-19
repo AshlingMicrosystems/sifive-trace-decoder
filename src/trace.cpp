@@ -5153,6 +5153,7 @@ Trace::Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,
 	ts.addrDispFlags = addrDispFlags;
 	ts.srcBits = srcBits;
 	ts.freq = freq;
+	ts.itcPrintOpts = 0;
 
 	rc = configure(ts);
 
@@ -5391,7 +5392,7 @@ TraceDqr::DQErr Trace::configure(TraceSettings &settings)
 		enterISR[i] = TraceDqr::isNone;
 	}
 
-	status = setITCPrintOptions(TraceDqr::ITC_OPT_NLS,4096,0);
+	status = setITCPrintOptions(TraceDqr::ITC_OPT_NONE,4096,0);
 
 	if (settings.itcPrintOpts != TraceDqr::ITC_OPT_NONE) {
 		rc = setITCPrintOptions(settings.itcPrintOpts,settings.itcPrintBufferSize,settings.itcPrintChannel);
@@ -5753,27 +5754,35 @@ TraceDqr::DQErr Trace::setTSSize(int size)
 
 TraceDqr::TIMESTAMP Trace::processTS(TraceDqr::tsType tstype, TraceDqr::TIMESTAMP lastTs, TraceDqr::TIMESTAMP newTs)
 {
-	TraceDqr::TIMESTAMP ts;
+    TraceDqr::TIMESTAMP ts;
+    //printf("\nProcess Ts Type [%d] TS Size [%d] Last TS [%llu] New TS [%llu]\n", tstype, tsSize, lastTs, newTs);
 
-	if (tstype == TraceDqr::TS_full) {
-		// add in the wrap from previous timestamps
-		ts = newTs + (lastTs & (~((((TraceDqr::TIMESTAMP)1) << tsSize)-1)));
-	}
-	else if (lastTs != 0) {
-		ts = lastTs ^ newTs;
-	}
-	else {
-		ts = 0;
-	}
+    if (tstype == TraceDqr::TS_full) {
+        // If newTs is already a full 64-bit timestamp, use it directly
+        if (tsSize == 63) {
+            ts = newTs;  
+        } else {
+            // Reconstruct full absolute timestamp using upper bits of lastTs
+            ts = newTs + (lastTs & ~((1ULL << tsSize) - 1));
+            
+            // Apply wraparound correction only when needed
+            if (newTs < (lastTs & ((1ULL << tsSize) - 1))) {
+                ts += (1ULL << tsSize);
+            }
+        }
+    } 
+    else if (tstype == TraceDqr::TS_rel && lastTs != 0) {
+        // Add relative offset to the last timestamp
+        ts = lastTs + newTs;
+    } 
+    else {
+        // If lastTs is not valid or unknown type, return 0
+        printf("Warning: Invalid timestamp type [%d] or uninitialized lastTs.\n", tstype);
+        return 0;
+    }
 
-	if (ts < lastTs) {
-		// adjust for wrap
-		ts += ((TraceDqr::TIMESTAMP)1) << tsSize;
-	}
-
-	return ts;
+    return ts;
 }
-
 
 TraceDqr::DQErr Trace::getNumBytesInSWTQ(int &numBytes)
 {
@@ -6831,6 +6840,8 @@ TraceDqr::DQErr Trace::processTraceMessage(NexusMessage &nm,TraceDqr::ADDRESS &p
 	case TraceDqr::TCODE_AUXACCESS_WRITE:
 	case TraceDqr::TCODE_RESOURCEFULL:
 	case TraceDqr::TCODE_CORRELATION:
+	case TraceDqr::TCODE_REPEATBRANCH:
+	case TraceDqr::TCODE_TRAP_INFO:
 		if (nm.haveTimestamp) {
 			ts = processTS(TraceDqr::TS_rel,ts,nm.timestamp);
 		}
@@ -7303,7 +7314,6 @@ TraceDqr::DQErr Trace::processTraceMessage(NexusMessage &nm,TraceDqr::ADDRESS &p
 	case TraceDqr::TCODE_AUXACCESS_READNEXT:
 	case TraceDqr::TCODE_AUXACCESS_WRITENEXT:
 	case TraceDqr::TCODE_AUXACCESS_RESPONSE:
-	case TraceDqr::TCODE_REPEATBRANCH:
 	case TraceDqr::TCODE_REPEATINSTRUCTION:
 	case TraceDqr::TCODE_REPEATINSTRUCTION_WS:
 	case TraceDqr::TCODE_UNDEFINED:
@@ -7507,6 +7517,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 		if (readNewTraceMessage != false) {
 			do {
 				rc = sfp->readNextTraceMsg(nm,analytics,haveMsg);
+				//printf("TEMP: TCODE is %d\n", nm.tcode);
 
 				if (rc != TraceDqr::DQERR_OK) {
 					// have an error. either EOF, or error
@@ -7558,6 +7569,8 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				case TraceDqr::TCODE_AUXACCESS_WRITE:
 				case TraceDqr::TCODE_INCIRCUITTRACE:
 				case TraceDqr::TCODE_INCIRCUITTRACE_WS:
+				case TraceDqr::TCODE_REPEATBRANCH:
+				case TraceDqr::TCODE_TRAP_INFO:
 					break;
 				case TraceDqr::TCODE_CORRELATION:
 					if (nm.correlation.cdf == 1) {
@@ -7571,7 +7584,6 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					traceType = TraceDqr::TRACETYPE_HTM;
 					if (globalDebugFlag) printf("History/taken/not taken count TCODE: switching to HTM mode\n");
 					break;
-				case TraceDqr::TCODE_REPEATBRANCH:
 				case TraceDqr::TCODE_REPEATINSTRUCTION:
 				case TraceDqr::TCODE_REPEATINSTRUCTION_WS:
 				case TraceDqr::TCODE_AUXACCESS_READNEXT:
@@ -7621,6 +7633,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			}
 		}
 
+		//printf("TEMP: Current state is %d\n", state[currentCore]);
 		switch (state[currentCore]) {
 		case TRACE_STATE_SYNCCATE:	// Looking for a CA trace sync
 			// printf("TRACE_STATE_SYNCCATE\n");
@@ -7674,7 +7687,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			case TraceDqr::TCODE_CORRELATION:
 			case TraceDqr::TCODE_RESOURCEFULL:
 			case TraceDqr::TCODE_INDIRECTBRANCHHISTORY:
-			case TraceDqr::TCODE_REPEATBRANCH:
+			//case TraceDqr::TCODE_REPEATBRANCH:
 			case TraceDqr::TCODE_REPEATINSTRUCTION:
 			case TraceDqr::TCODE_REPEATINSTRUCTION_WS:
 			case TraceDqr::TCODE_AUXACCESS_READNEXT:
@@ -8087,6 +8100,18 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					lastTime[currentCore] = processTS(TraceDqr::TS_rel,lastTime[currentCore],nm.timestamp);
 				}
 				break;
+			case TraceDqr::TCODE_TRAP_INFO:
+			case TraceDqr::TCODE_REPEATBRANCH:
+				rc = processTraceMessage(nm,currentAddress[currentCore],lastFaddr[currentCore],lastTime[currentCore],consumed);
+				if (rc != TraceDqr::DQERR_OK) {
+					printf("Error: NextInstruction(): state TRACE_STATE_GETFIRSTSYNCMSG: processTraceMessage()\n");
+
+					status = TraceDqr::DQERR_ERR;
+					state[currentCore] = TRACE_STATE_ERROR;
+
+					return status;
+				}
+				break;
 			case TraceDqr::TCODE_ERROR:
 				// reset time. Messages have been missed.
 				lastTime[currentCore] = 0;
@@ -8265,6 +8290,8 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 				return status;
 			case TraceDqr::TCODE_DATA_ACQUISITION:
+			case TraceDqr::TCODE_TRAP_INFO:
+			case TraceDqr::TCODE_REPEATBRANCH:
 				rc = processTraceMessage(nm,currentAddress[currentCore],lastFaddr[currentCore],lastTime[currentCore],consumed);
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_GETMSGWITHCOUNT: processTraceMessage()\n");
@@ -8359,6 +8386,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				}
 
 				if (msgInfo != nullptr) {
+					previousNM = nm;
 					messageInfo = nm;
 					messageInfo.time = lastTime[currentCore];
 
@@ -8408,6 +8436,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					b_type = nm.indirectHistoryWS.b_type;
 					break;
 				case TraceDqr::TCODE_DIRECT_BRANCH:
+				//case TraceDqr::TCODE_REPEATBRANCH:
 				case TraceDqr::TCODE_RESOURCEFULL:
 					// fall through
 				default:
@@ -8420,6 +8449,20 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 				readNewTraceMessage = true;
 				state[currentCore] = TRACE_STATE_GETNEXTMSG;
+				break;
+			case TraceDqr::TCODE_TRAP_INFO:
+			case TraceDqr::TCODE_REPEATBRANCH:
+				rc = processTraceMessage(nm,currentAddress[currentCore],lastFaddr[currentCore],lastTime[currentCore],consumed);
+				if (rc != TraceDqr::DQERR_OK) {
+					printf("Error: NextInstruction(): state TRACE_STATE_RETIREMESSAGE: processTraceMessage()\n");
+
+					status = TraceDqr::DQERR_ERR;
+					state[currentCore] = TRACE_STATE_ERROR;
+
+					return status;
+				}
+
+				readNewTraceMessage = true;
 				break;
 			case TraceDqr::TCODE_INCIRCUITTRACE:
 			case TraceDqr::TCODE_INCIRCUITTRACE_WS:
@@ -8601,6 +8644,8 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				return status;
 			case TraceDqr::TCODE_AUXACCESS_WRITE:
 			case TraceDqr::TCODE_DATA_ACQUISITION:
+			case TraceDqr::TCODE_TRAP_INFO:
+			case TraceDqr::TCODE_REPEATBRANCH:
 				rc = processTraceMessage(nm,currentAddress[currentCore],lastFaddr[currentCore],lastTime[currentCore],consumed);
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_GETNXTMSG: processTraceMessage()\n");
@@ -8883,6 +8928,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 			if (counts->getCurrentCountType(currentCore) != TraceDqr::COUNTTYPE_none) {
 				// still have valid counts. Keep running nextInstruction!
+				//wesprintf("TEMP: still have valid counts %d\n", counts->getCurrentCountType(currentCore));
 
 				return status;
 			}

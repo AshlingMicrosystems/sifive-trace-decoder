@@ -4880,6 +4880,11 @@ TraceDqr::DQErr Analytics::updateTraceInfo(NexusMessage &nm,uint32_t bits,uint32
 
 		have_faddr = true;
 		break;
+	case TraceDqr::TCODE_REPEATBRANCH:
+		core[nm.coreId].num_trace_rbranch += 1;
+		core[nm.coreId].trace_bits_rbranch += bits;
+		num_branches_all_cores += nm.repeatBranch.b_cnt;
+		break;
 	case TraceDqr::TCODE_AUXACCESS_WRITE:
 		core[nm.coreId].num_trace_auxaccesswrite += 1;
 		core[nm.coreId].trace_bits_auxaccesswrite += bits;
@@ -5060,6 +5065,10 @@ TraceDqr::DQErr Analytics::updateTraceInfo(NexusMessage &nm,uint32_t bits,uint32
 		core[nm.coreId].trace_bits_incircuittraceWS += bits;
 		have_faddr = true;
 		break;
+	case TraceDqr::TCODE_TRAP_INFO:
+		core[nm.coreId].num_trace_trapinfo += 1;
+		core[nm.coreId].trace_bits_trapinfo += bits;
+		break;
 	case TraceDqr::TCODE_DEBUG_STATUS:
 	case TraceDqr::TCODE_DEVICE_ID:
 	case TraceDqr::TCODE_DATA_WRITE:
@@ -5074,7 +5083,6 @@ TraceDqr::DQErr Analytics::updateTraceInfo(NexusMessage &nm,uint32_t bits,uint32
 	case TraceDqr::TCODE_AUXACCESS_READNEXT:
 	case TraceDqr::TCODE_AUXACCESS_WRITENEXT:
 	case TraceDqr::TCODE_AUXACCESS_RESPONSE:
-	case TraceDqr::TCODE_REPEATBRANCH:
 	case TraceDqr::TCODE_REPEATINSTRUCTION:
 	case TraceDqr::TCODE_REPEATINSTRUCTION_WS:
 	default:
@@ -6742,6 +6750,8 @@ int NexusMessage::getI_Cnt()
 		return indirectHistory.i_cnt;
 	case TraceDqr::TCODE_INDIRECTBRANCHHISTORY_WS:
 		return indirectHistoryWS.i_cnt;
+	case TraceDqr::TCODE_REPEATBRANCH:
+		return repeatBranch.i_cnt;//return (repeatBranch.b_cnt * repeatBranch.i_cnt);
 	case TraceDqr::TCODE_RESOURCEFULL:
 		if (resourceFull.rCode == 0) {
 			return resourceFull.i_cnt;
@@ -6765,7 +6775,6 @@ int NexusMessage::getI_Cnt()
 	case TraceDqr::TCODE_AUXACCESS_READNEXT:
 	case TraceDqr::TCODE_AUXACCESS_WRITENEXT:
 	case TraceDqr::TCODE_AUXACCESS_RESPONSE:
-	case TraceDqr::TCODE_REPEATBRANCH:
 	case TraceDqr::TCODE_REPEATINSTRUCTION:
 	case TraceDqr::TCODE_REPEATINSTRUCTION_WS:
 	case TraceDqr::TCODE_INCIRCUITTRACE:
@@ -8211,7 +8220,7 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 		}
 		break;
 	case TraceDqr::TCODE_REPEATBRANCH:
-		snprintf(dst+n,dst_len-n,"REPEAT BRANCH (%d)",tcode);
+		snprintf(dst+n,dst_len-n,"REPEAT BRANCH (%d) Branch Repeat Count: %d",tcode, repeatBranch.b_cnt);
 		break;
 	case TraceDqr::TCODE_REPEATINSTRUCTION:
 		snprintf(dst+n,dst_len-n,"REPEAT INSTRUCTION (%d)",tcode);
@@ -8383,6 +8392,9 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			}
 		}
 		break;
+	case TraceDqr::TCODE_TRAP_INFO:
+		snprintf(dst+n,dst_len-n,"TRAP INFO (%d) Trap Value: %d",tcode, trapInfo.trap_value);
+		break;
 	case TraceDqr::TCODE_UNDEFINED:
 		snprintf(dst+n,dst_len-n,"UNDEFINED (%d)",tcode);
 		break;
@@ -8463,6 +8475,9 @@ void NexusMessage::dump()
 			std::cout << "  # Trace Message(" << msgNum << "): Resource Full, Invalid or unsupported rCode for reourceFull TCODE" << std::endl;
 			break;
 		}
+		break;
+	case TraceDqr::TCODE_REPEATBRANCH:
+		std::cout << "  # Trace Message(" << msgNum << "): Repeat Branch, B-CNT=" << repeatBranch.b_cnt << std::dec << std::endl; // << ", TS=0x" << timestamp << dec;// << endl;
 		break;
 	case TraceDqr::TCODE_INDIRECTBRANCHHISTORY:
 		std::cout << "  # Trace Message(" << msgNum << "): Indirect Branch History, ICNT=" << indirectHistory.i_cnt << ", BTYPE=" << indirectHistory.b_type << ", UADDR=0x" << std::hex << indirectHistory.u_addr << std::dec << ", history=0x" << std::hex << indirectHistory.history << std::dec << std::endl;
@@ -8612,6 +8627,9 @@ void NexusMessage::dump()
 	    case TraceDqr::ICT_NONE:
 			break;
 		}
+		break;
+	case TraceDqr::TCODE_TRAP_INFO:
+		std::cout << "  # Trace Message(" << msgNum << "): Trap Info, TVAL=" << trapInfo.trap_value << std::dec << std::endl; // << ", TS=0x" << timestamp << dec;// << endl;
 		break;
 	default:
 		std::cout << "Error: NexusMessage::dump(): Unknown TCODE " << tcode << " (0x" << std::hex << tcode << std::dec << "), msgnum: " << msgNum << std::endl;
@@ -8791,6 +8809,11 @@ TraceDqr::DQErr Count::setCounts(NexusMessage *nm)
 	uint64_t tmp_history = 0;
 	int tmp_taken = 0;
 	int tmp_notTaken = 0;
+	
+	static int prev_i_cnt = 0;
+	static uint64_t prev_history = 0;
+	static int prev_taken = 0;
+	static int prev_notTaken = 0;
 
 	switch (nm->tcode) {
 	case TraceDqr::TCODE_DEBUG_STATUS:
@@ -8804,6 +8827,7 @@ TraceDqr::DQErr Count::setCounts(NexusMessage *nm)
 	case TraceDqr::TCODE_AUXACCESS_WRITE:
 	case TraceDqr::TCODE_INCIRCUITTRACE:
 	case TraceDqr::TCODE_INCIRCUITTRACE_WS:
+	case TraceDqr::TCODE_TRAP_INFO:
 		// no counts, do nothing
 		return TraceDqr::DQERR_OK;
 	case TraceDqr::TCODE_DIRECT_BRANCH:
@@ -8820,6 +8844,12 @@ TraceDqr::DQErr Count::setCounts(NexusMessage *nm)
 		break;
 	case TraceDqr::TCODE_INDIRECT_BRANCH_WS:
 		tmp_i_cnt = nm->indirectBranchWS.i_cnt;
+		break;
+	case TraceDqr::TCODE_REPEATBRANCH:
+		//tmp_i_cnt = prev_i_cnt;
+		//tmp_history = prev_history;
+		//tmp_notTaken = prev_taken;
+		//tmp_taken = prev_notTaken;
 		break;
 	case TraceDqr::TCODE_RESOURCEFULL:
 		switch (nm->resourceFull.rCode) {
@@ -8864,7 +8894,6 @@ TraceDqr::DQErr Count::setCounts(NexusMessage *nm)
 	case TraceDqr::TCODE_AUXACCESS_READNEXT:
 	case TraceDqr::TCODE_AUXACCESS_WRITENEXT:
 	case TraceDqr::TCODE_AUXACCESS_RESPONSE:
-	case TraceDqr::TCODE_REPEATBRANCH:
 	case TraceDqr::TCODE_REPEATINSTRUCTION:
 	case TraceDqr::TCODE_REPEATINSTRUCTION_WS:
 	case TraceDqr::TCODE_UNDEFINED:
@@ -8874,6 +8903,7 @@ TraceDqr::DQErr Count::setCounts(NexusMessage *nm)
 		return TraceDqr::DQERR_ERR;
 	}
 
+	prev_i_cnt = tmp_i_cnt;
 	if (tmp_i_cnt != 0) {
 		rc = setICnt(nm->coreId,tmp_i_cnt);
 		if (rc != TraceDqr::DQERR_OK) {
@@ -8881,6 +8911,7 @@ TraceDqr::DQErr Count::setCounts(NexusMessage *nm)
 		}
 	}
 
+	prev_history = tmp_history;
 	if (tmp_history != 0) {
 		rc = setHistory(nm->coreId,tmp_history);
 		if (rc != TraceDqr::DQERR_OK) {
@@ -8888,6 +8919,7 @@ TraceDqr::DQErr Count::setCounts(NexusMessage *nm)
 		}
 	}
 
+	prev_taken = tmp_taken;
 	if (tmp_taken != 0) {
 		rc = setTakenCount(nm->coreId,tmp_taken);
 		if (rc != TraceDqr::DQERR_OK) {
@@ -8895,6 +8927,7 @@ TraceDqr::DQErr Count::setCounts(NexusMessage *nm)
 		}
 	}
 
+	prev_notTaken = tmp_notTaken;
 	if (tmp_notTaken != 0) {
 		rc = setNotTakenCount(nm->coreId,tmp_notTaken);
 		if (rc != TraceDqr::DQERR_OK) {
@@ -10769,6 +10802,172 @@ TraceDqr::DQErr SliceFileParser::parseDataAcquisition(NexusMessage &nm,Analytics
 	return status;
 }
 
+TraceDqr::DQErr SliceFileParser::parseRepeatBranch(NexusMessage &nm,Analytics &analytics)
+{
+	TraceDqr::DQErr rc;
+	uint64_t   tmp;
+	int        width;
+	int        bits = 6;	// start bits at 6 to account for tcode
+	int        ts_bits = 0;
+
+	nm.tcode = TraceDqr::TCODE_REPEATBRANCH;
+
+	// if multicore, parse src field
+
+	if (srcbits > 0) {
+        rc = parseFixedField(srcbits,&tmp);
+        if (rc != TraceDqr::DQERR_OK) {
+            status = rc;
+
+            return status;
+        }
+
+        bits += srcbits;
+
+        nm.coreId = (uint8_t)tmp;
+	}
+	else {
+		nm.coreId = 0;
+	}
+
+	// parse the variable length the b-cnt
+
+	rc = parseVarField(&tmp,&width);
+	if (rc != TraceDqr::DQERR_OK) {
+		status = rc;
+
+		return status;
+	}
+
+	bits += width;
+
+    nm.repeatBranch.b_cnt = (int)tmp;
+
+	if (eom == true) {
+		nm.haveTimestamp = false;
+		nm.timestamp = 0;
+	}
+	else {
+		rc = parseVarField(&tmp,&width); // this field is optional - check err
+		if (rc != TraceDqr::DQERR_OK) {
+			status = rc;
+
+			return status;
+		}
+
+		bits += width;
+		ts_bits = width;
+
+		// check if entire message has been consumed
+
+		if (eom != true) {
+			status = TraceDqr::DQERR_BM;
+
+			return status;
+		}
+
+		nm.haveTimestamp = true;
+		nm.timestamp = (TraceDqr::TIMESTAMP)tmp;
+	}
+
+	//printf("TEMP: SliceFileParser::parseRepeatBranch(): Core: %d, Branch Count: %d, Timestamp: %llu\n", nm.coreId, nm.repeatBranch.b_cnt, nm.timestamp);
+
+	status = analytics.updateTraceInfo(nm,bits+msgSlices*2,msgSlices*2,ts_bits,0);
+
+	nm.msgNum = analytics.currentTraceMsgNum();
+
+	return status;
+}
+
+TraceDqr::DQErr SliceFileParser::parseTrapInfo(NexusMessage &nm,Analytics &analytics)
+{
+	TraceDqr::DQErr rc;
+	uint64_t   tmp;
+	int        width;
+	int        bits = 6;	// start bits at 6 to account for tcode
+	int        ts_bits = 0;
+
+	nm.tcode = TraceDqr::TCODE_TRAP_INFO;
+
+	// if multicore, parse src field
+
+	if (srcbits > 0) {
+        rc = parseFixedField(srcbits,&tmp);
+        if (rc != TraceDqr::DQERR_OK) {
+            status = rc;
+
+            return status;
+        }
+
+        bits += srcbits;
+
+        nm.coreId = (uint8_t)tmp;
+	}
+	else {
+		nm.coreId = 0;
+	}
+	
+	// parse the fixed field rsvd
+	// TODO: add support for configuring size of this fixed field, similar to srcbits
+
+	rc = parseFixedField(2,&tmp);
+	if (rc != TraceDqr::DQERR_OK) {
+		status = rc;
+
+		return status;
+	}
+
+    bits += 2;
+
+	// parse the variable length the tval
+
+	rc = parseVarField(&tmp,&width);
+	if (rc != TraceDqr::DQERR_OK) {
+		status = rc;
+
+		return status;
+	}
+
+	bits += width;
+
+    nm.trapInfo.trap_value = tmp;
+
+	if (eom == true) {
+		nm.haveTimestamp = false;
+		nm.timestamp = 0;
+	}
+	else {
+		rc = parseVarField(&tmp,&width); // this field is optional - check err
+		if (rc != TraceDqr::DQERR_OK) {
+			status = rc;
+
+			return status;
+		}
+
+		bits += width;
+		ts_bits = width;
+
+		// check if entire message has been consumed
+
+		if (eom != true) {
+			status = TraceDqr::DQERR_BM;
+
+			return status;
+		}
+
+		nm.haveTimestamp = true;
+		nm.timestamp = (TraceDqr::TIMESTAMP)tmp;
+	}
+
+	//printf("TEMP: SliceFileParser::parseTrapInfo(): Core: %d, Trap Value: %llu, Timestamp: %llu\n", nm.coreId, nm.trapInfo.trap_value, nm.timestamp);
+
+	status = analytics.updateTraceInfo(nm,bits+msgSlices*2,msgSlices*2,ts_bits,0);
+
+	nm.msgNum = analytics.currentTraceMsgNum();
+
+	return status;
+}
+
 TraceDqr::DQErr SliceFileParser::parseFixedField(int width, uint64_t *val)
 {
 	if ((width <= 0) || (val == nullptr)) {
@@ -11501,6 +11700,18 @@ TraceDqr::DQErr SliceFileParser::readNextTraceMsg(NexusMessage &nm,Analytics &an
 			rc = parseResourceFull(nm,analytics);
 			if (rc != TraceDqr::DQERR_OK) {
 				std::cout << "Error: parseResourceFull()\n";
+			}
+			break;
+		case TraceDqr::TCODE_REPEATBRANCH:
+			rc = parseRepeatBranch(nm,analytics);
+			if (rc != TraceDqr::DQERR_OK) {
+				std::cout << "Error: parseRepeatBranch()\n";
+			}
+			break;
+		case TraceDqr::TCODE_TRAP_INFO:
+			rc = parseTrapInfo(nm,analytics);
+			if (rc != TraceDqr::DQERR_OK) {
+				std::cout << "Error: parseTrapInfo()\n";
 			}
 			break;
 		default:
