@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
 	       }
 	       else
 	       {
-		  sleep(2); // in this mode when we're trying to reconnect, it should be rare, but if it happens,
+		  //sleep(2); // in this mode when we're trying to reconnect, it should be rare, but if it happens,
 		  	// it's probably best to spare the CPU when repeatedly trying to reconnect
 	       }
 	    }
