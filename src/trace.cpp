@@ -5124,7 +5124,7 @@ Trace::Trace(char *mf_name)
 	status = TraceDqr::DQERR_OK;
 }
 
-Trace::Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq)
+Trace::Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq, TySifiveTsProcessing timestamp_procesing_mechanism)
 {
 	TraceDqr::DQErr rc;
 	TraceSettings ts;
@@ -5144,6 +5144,7 @@ Trace::Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,
 	eventConverter = nullptr;
 	perfConverter = nullptr;
 	objdump       = nullptr;
+	m_timestamp_procesing_mechanism = timestamp_procesing_mechanism;
 
 	ts.propertyToTFName(tf_name);
 	ts.propertyToEFName(ef_name);
@@ -5754,6 +5755,11 @@ TraceDqr::DQErr Trace::setTSSize(int size)
 
 TraceDqr::TIMESTAMP Trace::processTS(TraceDqr::tsType tstype, TraceDqr::TIMESTAMP lastTs, TraceDqr::TIMESTAMP newTs)
 {
+	if(m_timestamp_procesing_mechanism == TySifiveTsProcessing::TS_TT)
+	{
+		return newTs;
+	}
+
     TraceDqr::TIMESTAMP ts;
     //printf("\nProcess Ts Type [%d] TS Size [%d] Last TS [%llu] New TS [%llu]\n", tstype, tsSize, lastTs, newTs);
 

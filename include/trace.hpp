@@ -510,7 +510,7 @@ public:
 	bool itcPerfEnable;
 	int itcPerfChannel;
 	uint32_t itcPerfMarkerValue;
-
+	TySifiveTsProcessing m_timestamp_procesing_mechanism = TySifiveTsProcessing::TS_DEFAULT;
 private:
 	TraceDqr::DQErr propertyToBool(const char *src,bool &value);
 };

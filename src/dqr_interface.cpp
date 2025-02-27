@@ -222,7 +222,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 			}
 		}
 		else {
-			trace = new (std::nothrow) Trace(tf_name,ef_name,numAddrBits,addrDispFlags,srcbits,od_name,freq);
+			trace = new (std::nothrow) Trace(tf_name,ef_name,numAddrBits,addrDispFlags,srcbits,od_name,freq,m_timestamp_procesing_mechanism);
 
 			if (trace == nullptr) {
 				printf("Error: Could not create Trace object\n");
@@ -830,7 +830,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 			}
 		}
 		else {
-			trace = new (std::nothrow) Trace(tf_name,ef_name,numAddrBits,addrDispFlags,srcbits,od_name,freq);
+			trace = new (std::nothrow) Trace(tf_name,ef_name,numAddrBits,addrDispFlags,srcbits,od_name,freq,m_timestamp_procesing_mechanism);
 
 			if (trace == nullptr) {
 				printf("Error: Could not create Trace object\n");
@@ -1405,6 +1405,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Configure(const TDecoderConfig&
 	srcbits = config.src_field_size_bits;
 	itcPrintOpts = config.itc_print_options;
 	itcPrintChannel = config.itc_print_channel;
+	m_timestamp_procesing_mechanism = config.timestamp_procesing_mechanism;
 
 	return SIFIVE_TRACE_DECODER_OK;
 }
