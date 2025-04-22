@@ -22,7 +22,7 @@ $(CONFIG):
 	$(MAKE) -C $@ $(MAKECMDGOALS) INSTALLPATH="$(INSTALLABSPATH)"
 
 Release:
-	$(MAKE) -C Release $(MAKECMDGOALS) INSTALLPATH="$(INSTALLABSPATH)"
+	$(MAKE) --debug -C Release $(MAKECMDGOALS) INSTALLPATH="$(INSTALLABSPATH)"
 
 install: install-include install-examples install-scripts
 

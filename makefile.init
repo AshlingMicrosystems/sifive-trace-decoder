@@ -10,7 +10,7 @@ SWTINCLUDES += ../include/swt.hpp
 %.o: ../src/%.cpp $(INCLUDES)
 	@echo 'Building file: $<'
 	@echo 'Invoking: GCC C++ Compiler'
-	$(CROSSPREFIX)g++ -I"../include" $(CFLAGS) -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+	$(CROSSPREFIX)g++ -I"../include" -D WINDOWS -std=c++11 -DDLL_EXPORT -DDECODER_VERSION=\"0.17.0\" -Wall -Wformat=0 -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 
