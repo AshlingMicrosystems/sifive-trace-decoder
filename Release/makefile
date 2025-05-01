@@ -8,7 +8,7 @@ endif
 
 RM := rm -rf
 
-CFLAGS += -DDECODER_VERSION=\"$(TRACE_DECODER_VERSION)\" -O3 -Wall -Wformat=0
+CFLAGS += -DDECODER_VERSION=\"$(TRACE_DECODER_VERSION)\" -Wall -Wformat=0
 SWIGCFLAGS += -DDECODER_VERSION=\"$(TRACE_DECODER_VERSION)\" -O -Wall -Wformat=0
 
 # All Target
