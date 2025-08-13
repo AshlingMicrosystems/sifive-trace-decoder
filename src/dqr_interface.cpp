@@ -702,7 +702,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 
 	return SIFIVE_TRACE_DECODER_OK;
 }
-
+/*
 TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, char* p_buff, const uint32_t size)
 {
 	if(out_file == nullptr)
@@ -715,30 +715,39 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 	vcd = nullptr;
 	fp = nullptr;
 
-	if (sf_name != nullptr) {
-		if ( ef_name == nullptr) {
-			printf("Error: Simulator requires an ELF file (-e switch)\n");
-			CleanUp();
-			return SIFIVE_TRACE_DECODER_ELF_NULL;
-		}
+	if ((tf_name != nullptr) || (ef_name != nullptr) || (traceType == TraceDqr::TRACETYPE_BTM) || (traceType == TraceDqr::TRACETYPE_HTM)) 
+	{
+		TraceDqr::DQErr rc; 
+		trace = new (std::nothrow) Trace(tf_name,ef_name,numAddrBits,addrDispFlags,srcbits,od_name,freq,m_timestamp_procesing_mechanism);
 
-		sim = new (std::nothrow) Simulator(sf_name,ef_name,od_name);
-		if (sim == nullptr) {
-			printf("Error: Could not create Simulator object\n");
+		if (trace == nullptr) {
+			printf("Error: Could not create Trace object\n");
 			CleanUp();
 			return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
 		}
 
-		if (sim->getStatus() != TraceDqr::DQERR_OK) {
-			printf("Error: new Simulator(%s,%d) failed\n",sf_name,archSize);
+		if (trace->getStatus() != TraceDqr::DQERR_OK) {
+			printf("Error: new Trace(%s,%s) failed\n",tf_name,ef_name);
 			CleanUp();
-			return SIFIVE_TRACE_DECODER_SIM_STATUS_ERROR;
+			return SIFIVE_TRACE_DECODER_TRACE_STATUS_ERROR;
 		}
 
-		if (cutPath != nullptr) {
-			TraceDqr::DQErr rc;
+		trace->setTraceType(traceType);
 
-			rc = sim->subSrcPath(cutPath,newRoot);
+		if (ca_name != nullptr) {
+			rc = trace->setCATraceFile(ca_name,caType);
+			if (rc != TraceDqr::DQERR_OK) {
+				printf("Error: Could not set cycle accurate trace file\n");
+				CleanUp();
+				return SIFIVE_TRACE_DECODER_ERR;
+			}
+		}
+
+		trace->setTSSize(tssize);
+		trace->setPathType(pt);
+
+		if (cutPath != nullptr) {
+			rc = trace->subSrcPath(cutPath,newRoot);
 			if (rc != TraceDqr::DQERR_OK) {
 				printf("Error: Could not set cutPath or newRoot\n");
 				CleanUp();
@@ -746,143 +755,22 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 			}
 		}
 
-		srcbits = 1;
-	}
-	else if ((vf_name != nullptr) || (traceType == TraceDqr::TRACETYPE_VCD)) {
-		if (pf_name != nullptr) {
-			vcd = new (std::nothrow) VCD(pf_name);
-			if (vcd == nullptr) {
-				printf("Error: Could not create VCD object\n");
-				CleanUp();
-				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
-			}
+		// NLS is on by default when the trace object is created. Only
+		// set the print options if something has changed
 
-			if (vcd->getStatus() != TraceDqr::DQERR_OK) {
-				printf("Error: new VCD(%s) failed\n",pf_name);
-				CleanUp();
-				return SIFIVE_TRACE_DECODER_VCD_STATUS_ERROR;
-			}
-		}
-		else {
-			if ( ef_name == nullptr) {
-				printf("Error: -vf switch also requires an ELF file (-e switch)\n");
-				CleanUp();
-				return SIFIVE_TRACE_DECODER_ELF_NULL;
-			}
-
-			vcd = new (std::nothrow) VCD(vf_name,ef_name,od_name);
-			if (vcd == nullptr) {
-				printf("Error: Could not create VCD object\n");
-				CleanUp();
-				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
-			}
-
-			if (vcd->getStatus() != TraceDqr::DQERR_OK) {
-				printf("Error: new VCD(%s,%s,%s) failed\n",vf_name,ef_name,od_name);
-				CleanUp();
-				return SIFIVE_TRACE_DECODER_VCD_STATUS_ERROR;
-			}
-
-			if (cutPath != nullptr) {
-				TraceDqr::DQErr rc;
-
-				rc = vcd->subSrcPath(cutPath,newRoot);
-				if (rc != TraceDqr::DQERR_OK) {
-					printf("Error: Could not set cutPath or newRoot\n");
-					CleanUp();
-					return SIFIVE_TRACE_DECODER_ERR;
-				}
-			}
+		if (itcPrintOpts != TraceDqr::ITC_OPT_NLS) {
+			trace->setITCPrintOptions(itcPrintOpts,4096,itcPrintChannel);
 		}
 
-		srcbits = 1;
-	}
-	else if ((pf_name != nullptr) || (tf_name != nullptr) || (traceType == TraceDqr::TRACETYPE_BTM) || (traceType == TraceDqr::TRACETYPE_HTM)) {
-		TraceDqr::DQErr rc;
-
-		if (pf_name != nullptr) {
-			// generate error message if anything was set to not-default!
-
-			if (tf_name != nullptr) {
-				printf("Error: cannot specify -t flag when -pf is also specified\n");
+		if (ctf_flag != false) {
+			rc = trace->enableCTFConverter(-1,nullptr);
+			if (rc != TraceDqr::DQERR_OK) {
+				printf("Error: Could not set CTF file\n");
 				CleanUp();
 				return SIFIVE_TRACE_DECODER_ERR;
 			}
-
-			if (ef_name != nullptr) {
-				printf("Error: cannot specify -e flag when -pf is also specified\n");
-				CleanUp();
-				return SIFIVE_TRACE_DECODER_ERR;
-			}
-
-			trace = new (std::nothrow) Trace(pf_name);
-
-			if (trace == nullptr) {
-				printf("Error: Could not create Trace object\n");
-				CleanUp();
-				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
-			}
-
-			if (trace->getStatus() != TraceDqr::DQERR_OK) {
-				printf("Error: new Trace() failed\n",pf_name);
-				CleanUp();
-				return SIFIVE_TRACE_DECODER_TRACE_STATUS_ERROR;
-			}
 		}
-		else {
-			trace = new (std::nothrow) Trace(tf_name,ef_name,numAddrBits,addrDispFlags,srcbits,od_name,freq,m_timestamp_procesing_mechanism);
-
-			if (trace == nullptr) {
-				printf("Error: Could not create Trace object\n");
-				CleanUp();
-				return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
-			}
-
-			if (trace->getStatus() != TraceDqr::DQERR_OK) {
-				printf("Error: new Trace(%s,%s) failed\n",tf_name,ef_name);
-				CleanUp();
-				return SIFIVE_TRACE_DECODER_TRACE_STATUS_ERROR;
-			}
-
-			trace->setTraceType(traceType);
-
-			if (ca_name != nullptr) {
-				rc = trace->setCATraceFile(ca_name,caType);
-				if (rc != TraceDqr::DQERR_OK) {
-					printf("Error: Could not set cycle accurate trace file\n");
-					CleanUp();
-					return SIFIVE_TRACE_DECODER_ERR;
-				}
-			}
-
-			trace->setTSSize(tssize);
-			trace->setPathType(pt);
-
-			if (cutPath != nullptr) {
-				rc = trace->subSrcPath(cutPath,newRoot);
-				if (rc != TraceDqr::DQERR_OK) {
-					printf("Error: Could not set cutPath or newRoot\n");
-					CleanUp();
-					return SIFIVE_TRACE_DECODER_ERR;
-				}
-			}
-
-			// NLS is on by default when the trace object is created. Only
-			// set the print options if something has changed
-
-			if (itcPrintOpts != TraceDqr::ITC_OPT_NLS) {
-				trace->setITCPrintOptions(itcPrintOpts,4096,itcPrintChannel);
-			}
-
-			if (ctf_flag != false) {
-				rc = trace->enableCTFConverter(-1,nullptr);
-				if (rc != TraceDqr::DQERR_OK) {
-					printf("Error: Could not set CTF file\n");
-					CleanUp();
-					return SIFIVE_TRACE_DECODER_ERR;
-				}
-			}
-		}
+		
 	}
 	else {
 		printf("Error: must specify either simulator file, trace file, SWT trace server, properties file, or base name\n");
@@ -945,87 +833,99 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 	bool out_to_file = false;
 
 	do {
-		if (sim != nullptr) {
-			ec = sim->NextInstruction(&instInfo,&srcInfo);
-		}
-		else if (vcd != nullptr) {
-			ec = vcd->NextInstruction(&instInfo,&srcInfo);
-		}
-		else {
-			ec = trace->NextInstruction(&instInfo,&msgInfo,&srcInfo,&nm);
-			if (ec == TraceDqr::DQERR_OK)
+		ec = trace->NextInstruction(&instInfo,&msgInfo,&srcInfo,&nm);
+		if (ec == TraceDqr::DQERR_OK)
+		{
+			if(nm)
 			{
-				if(nm)
+				if(nm->offset < m_trace_start_idx || nm->offset > m_trace_stop_idx)
 				{
-					if(nm->offset < m_trace_start_idx || nm->offset > m_trace_stop_idx)
-					{
-						out_to_file = false;
-					}
-					else
-					{
-						out_to_file = true;
-					}
+					out_to_file = false;
+				}
+				else
+				{
+					out_to_file = true;
 				}
 			}
 		}
-
+		
 		if (ec == TraceDqr::DQERR_OK && out_to_file)
 		{
 			if(profile_flag)
 			{
 				if(trace != nullptr && instInfo != nullptr)
 				{
-					fprintf(fp, "%llx\n", instInfo->address);
+					snprintf(dst, sizeof(dst), "%llx\n", instInfo->address);
+					m_output_data_buffer.emplace_back(dst);
+					//fprintf(fp, "%llx\n", instInfo->address);
 				}
 			}
-			if (srcInfo != nullptr) {
-				if ((lastSrcFile != srcInfo->sourceFile) || (lastSrcLine != srcInfo->sourceLine) || (lastSrcLineNum != srcInfo->sourceLineNum)) {
+			if (srcInfo != nullptr) 
+			{
+				if ((lastSrcFile != srcInfo->sourceFile) || (lastSrcLine != srcInfo->sourceLine) || (lastSrcLineNum != srcInfo->sourceLineNum)) 
+				{
 					lastSrcFile = srcInfo->sourceFile;
 					lastSrcLine = srcInfo->sourceLine;
 					lastSrcLineNum = srcInfo->sourceLineNum;
 
-					if (file_flag) {
-						if (srcInfo->sourceFile != nullptr) {
-							if (firstPrint == false) {
-								fprintf(fp, "\n");
+					if (file_flag) 
+					{
+						if (srcInfo->sourceFile != nullptr) 
+						{
+							if (firstPrint == false) 
+							{
+								m_output_data_buffer.emplace_back(std::string());
+								//fprintf(fp, "\n");
 							}
 
 							const char *sfp;
 
 							sfp = stripPath(strip_flag,srcInfo->sourceFile);
 
-							if (srcbits > 0) {
-								fprintf(fp, "[%d] ",srcInfo->coreId);
+							if (srcbits > 0) 
+							{
+								snprintf(dst, sizeof(dst), "[%d] ",srcInfo->coreId);
+								m_output_data_buffer.emplace_back(dst);
+								//fprintf(fp, "[%d] ",srcInfo->coreId);
 							}
 
 							int sfpl = 0;
 							int sfl = 0;
 							int stripped = 0;
 
-							if (sfp != srcInfo->sourceFile) {
+							if (sfp != srcInfo->sourceFile) 
+							{
 								sfpl = strlen(sfp);
 								sfl = strlen(srcInfo->sourceFile);
 								stripped = sfl - sfpl;
 							}
 
-							if (stripped < srcInfo->cutPathIndex) {
+							if (stripped < srcInfo->cutPathIndex) 
+							{
+								snprintf(dst, sizeof(dst), "File: [");
+								m_output_data_buffer.emplace_back(dst);
 								fprintf(fp, "File: [");
 
-								if (sfp != srcInfo->sourceFile) {
+								if (sfp != srcInfo->sourceFile) 
+								{
 									fprintf(fp, "..");
 								}
 
-								for (int i = stripped; i < srcInfo->cutPathIndex; i++) {
+								for (int i = stripped; i < srcInfo->cutPathIndex; i++) 
+								{
 									fprintf(fp, "%c",srcInfo->sourceFile[i]);
 								}
 
 								fprintf(fp, "]%s:%d\n",&srcInfo->sourceFile[srcInfo->cutPathIndex],srcInfo->sourceLineNum);
 							}
-							else {
-								if (sfp != srcInfo->sourceFile) {
+							else 
+							{
+								if (sfp != srcInfo->sourceFile) 
+								{
 									fprintf(fp, "File: ..%s:%d\n",sfp,srcInfo->sourceLineNum);
 								}
-								else {
+								else 
+								{
 									fprintf(fp, "File: %s:%d\n",sfp,srcInfo->sourceLineNum);
 								}
 							}
@@ -1034,12 +934,16 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 						}
 					}
 
-					if (src_flag) {
-						if (srcInfo->sourceLine != nullptr) {
-							if (srcbits > 0) {
+					if (src_flag) 
+					{
+						if (srcInfo->sourceLine != nullptr) 
+						{
+							if (srcbits > 0) 
+							{
 								fprintf(fp, "[%d] Source: %s\n",srcInfo->coreId,srcInfo->sourceLine);
 							}
-							else {
+							else 
+							{
 								fprintf(fp, "Source: %s\n",srcInfo->sourceLine);
 							}
 
@@ -1053,18 +957,24 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 				}
 			}
 
-			if (dasm_flag && (instInfo != nullptr)) {
+			if (dasm_flag && (instInfo != nullptr)) 
+			{
 				instInfo->addressToText(dst,sizeof dst,0);
 
-				if (func_flag) {
-					if (((instInfo->addressLabel != nullptr) && (instInfo->addressLabelOffset == 0)) || (instInfo->address != (lastAddress + lastInstSize / 8))) {
-						if (srcbits > 0) {
+				if (func_flag) 
+				{
+					if (((instInfo->addressLabel != nullptr) && (instInfo->addressLabelOffset == 0)) || (instInfo->address != (lastAddress + lastInstSize / 8))) 
+					{
+						if (srcbits > 0) 
+						{
 							fprintf(fp, "[%d] ",instInfo->coreId);
 						}
 
-						if (instInfo->addressLabel != nullptr) {
+						if (instInfo->addressLabel != nullptr) 
+						{
 							fprintf(fp, "<%s",instInfo->addressLabel);
-							if (instInfo->addressLabelOffset != 0) {
+							if (instInfo->addressLabelOffset != 0) 
+							{
 								fprintf(fp, "+%x",instInfo->addressLabelOffset);
 							}
 							fprintf(fp, ">\n");
@@ -1078,68 +988,86 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 					lastInstSize = instInfo->instSize;
 				}
 
-				if (srcbits > 0) {
+				if (srcbits > 0) 
+				{
 					fprintf(fp, "[%d] ", instInfo->coreId);
 				}
 
 				int n;
 
-				if (((vcd != nullptr) || (sim != nullptr) || (ca_name != nullptr)) && (instInfo->timestamp != 0)) {
+				if (((vcd != nullptr) || (sim != nullptr) || (ca_name != nullptr)) && (instInfo->timestamp != 0)) 
+				{
 					n = fprintf(fp, "t:%d ",instInfo->timestamp);
 
-					if (instInfo->caFlags & (TraceDqr::CAFLAG_PIPE0 | TraceDqr::CAFLAG_PIPE1)) {
-						if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE0) {
+					if (instInfo->caFlags & (TraceDqr::CAFLAG_PIPE0 | TraceDqr::CAFLAG_PIPE1)) 
+					{
+						if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE0) 
+						{
 							n += fprintf(fp, "[0:%d",instInfo->pipeCycles);
 						}
-						else if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE1) {
+						else if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE1) 
+						{
 							n += fprintf(fp, "[1:%d",instInfo->pipeCycles);
 						}
 
-						if (instInfo->caFlags & TraceDqr::CAFLAG_VSTART) {
-							n += fprintf(fp, "(%d)-%d(%dA,%dL,%dS)",instInfo->qDepth,instInfo->VIStartCycles,instInfo->arithInProcess,instInfo->loadInProcess,instInfo->storeInProcess);														}
+						if (instInfo->caFlags & TraceDqr::CAFLAG_VSTART) 
+						{
+							n += fprintf(fp, "(%d)-%d(%dA,%dL,%dS)",instInfo->qDepth,instInfo->VIStartCycles,instInfo->arithInProcess,instInfo->loadInProcess,instInfo->storeInProcess);														
+						}
 
-						if (instInfo->caFlags & TraceDqr::CAFLAG_VARITH) {
+						if (instInfo->caFlags & TraceDqr::CAFLAG_VARITH) 
+						{
 							n += fprintf(fp, "-%dA",instInfo->VIFinishCycles);
 						}
 
-						if (instInfo->caFlags & TraceDqr::CAFLAG_VLOAD) {
+						if (instInfo->caFlags & TraceDqr::CAFLAG_VLOAD) 
+						{
 							n += fprintf(fp, "-%dL",instInfo->VIFinishCycles);
 						}
 
-						if (instInfo->caFlags & TraceDqr::CAFLAG_VSTORE) {
+						if (instInfo->caFlags & TraceDqr::CAFLAG_VSTORE) 
+						{
 							n += fprintf(fp, "-%dS",instInfo->VIFinishCycles);
 						}
 
 						n += fprintf(fp, "] ");
 					}
 
-					for (int i = n; i < 14; i++) {
+					for (int i = n; i < 14; i++) 
+					{
 						fprintf(fp, " ");
 					}
 				}
-				else if (vcd != nullptr) {
-					if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE0) {
+				else if (vcd != nullptr) 
+				{
+					if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE0) 
+					{
 						n =fprintf(fp, "[0]");
 					}
-					else if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE1) {
+					else if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE1) 
+					{
 						n = fprintf(fp, "[1]");
 					}
-					else {
+					else 
+					{
 						n = fprintf(fp, "[?]");
 					}
 				}
 
 				n = fprintf(fp, "    %s:",dst);
 
-				for (int i = n; i < 20; i++) {
+				for (int i = n; i < 20; i++) 
+				{
 					fprintf(fp, " ");
 				}
 
 				instInfo->instructionToText(dst,sizeof dst,instlevel);
 				fprintf(fp, "  %s",dst);
 
-				if (showBranches == true) {
-					switch (instInfo->brFlags) {
+				if (showBranches == true) 
+				{
+					switch (instInfo->brFlags) 
+					{
 					case TraceDqr::BRFLAG_none:
 						break;
 					case TraceDqr::BRFLAG_unknown:
@@ -1154,38 +1082,46 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 					}
 				}
 
-				if (showCallsReturns == true) {
-					if (instInfo->CRFlag != TraceDqr::isNone) {
+				if (showCallsReturns == true) 
+				{
+					if (instInfo->CRFlag != TraceDqr::isNone) 
+					{
 						const char *format = "%s";
 
 						fprintf(fp, " [");
 
-						if (instInfo->CRFlag & TraceDqr::isCall) {
+						if (instInfo->CRFlag & TraceDqr::isCall) 
+						{
 							fprintf(fp, format,"Call");
 							format = ",%s";
 						}
 
-						if (instInfo->CRFlag & TraceDqr::isReturn) {
+						if (instInfo->CRFlag & TraceDqr::isReturn) 
+						{
 							fprintf(fp, format,"Return");
 							format = ",%s";
 						}
 
-						if (instInfo->CRFlag & TraceDqr::isSwap) {
+						if (instInfo->CRFlag & TraceDqr::isSwap) 
+						{
 							fprintf(fp, format,"Swap");
 							format = ",%s";
 						}
 
-						if (instInfo->CRFlag & TraceDqr::isInterrupt) {
+						if (instInfo->CRFlag & TraceDqr::isInterrupt) 
+						{
 							fprintf(fp, format,"Interrupt");
 							format = ",%s";
 						}
 
-						if (instInfo->CRFlag & TraceDqr::isException) {
+						if (instInfo->CRFlag & TraceDqr::isException) 
+						{
 							fprintf(fp, format,"Exception");
 							format = ",%s";
 						}
 
-						if (instInfo->CRFlag & TraceDqr::isExceptionReturn) {
+						if (instInfo->CRFlag & TraceDqr::isExceptionReturn) 
+						{
 							fprintf(fp, format,"Exception Return");
 							format = ",%s";
 						}
@@ -1199,7 +1135,8 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 				firstPrint = false;
 			}
 
-			if ((trace != nullptr) && trace_flag && (msgInfo != nullptr)) {
+			if ((trace != nullptr) && trace_flag && (msgInfo != nullptr)) 
+			{
 				// got the goods! Get to it!
 
 				if (globalDebugFlag) {
@@ -1208,11 +1145,13 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 
 				msgInfo->messageToText(dst,sizeof dst,msgLevel);
 
-				if (firstPrint == false) {
+				if (firstPrint == false) 
+				{
 					fprintf(fp, "\n");
 				}
 
-				if (srcbits > 0) {
+				if (srcbits > 0) 
+				{
 					fprintf(fp, "[%d] ",msgInfo->coreId);
 				}
 
@@ -1223,27 +1162,34 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 				firstPrint = false;
 			}
 
-			if ((trace != nullptr) && (itcPrintOpts != TraceDqr::ITC_OPT_NONE)) {
+			if ((trace != nullptr) && (itcPrintOpts != TraceDqr::ITC_OPT_NONE)) 
+			{
 				std::string s;
 				bool haveStr;
 
 				core_mask = trace->getITCPrintMask();
 
-				for (int core = 0; core_mask != 0; core++) {
-					if (core_mask & 1) {
+				for (int core = 0; core_mask != 0; core++) 
+				{
+					if (core_mask & 1) 
+					{
 						s = trace->getITCPrintStr(core,haveStr,startTime,endTime);
-						while (haveStr != false) {
-							if (firstPrint == false) {
+						while (haveStr != false) 
+						{
+							if (firstPrint == false) 
+							{
 								fprintf(fp, "\n");
 							}
 
-							if (srcbits > 0) {
+							if (srcbits > 0) 
+							{
 								fprintf(fp, "[%d] ",msgInfo->coreId);
 							}
 
 							std::cout << "ITC Print: ";
 
-							if ((startTime != 0) || (endTime != 0)) {
+							if ((startTime != 0) || (endTime != 0)) 
+							{
 								std::cout << "Msg Tics: <" << startTime << "-" << endTime << "> ";
 							}
 
@@ -1261,38 +1207,48 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 		}
 	} while (ec == TraceDqr::DQERR_OK);
 
-	if (ec == TraceDqr::DQERR_EOF) {
-		if (firstPrint == false) {
+	if (ec == TraceDqr::DQERR_EOF) 
+	{
+		if (firstPrint == false) 
+		{
 			fprintf(fp, "\n");
 		}
 	}
-	else {
+	else 
+	{
 		printf("Error (%d) terminated trace decode\n",ec);
 		CleanUp();
 		return SIFIVE_TRACE_DECODER_ERR;
 	}
 
-	if ((trace != nullptr) && (itcPrintOpts != TraceDqr::ITC_OPT_NONE)) {
+	if ((trace != nullptr) && (itcPrintOpts != TraceDqr::ITC_OPT_NONE)) 
+	{
 		std::string s = "";
 		bool haveStr;
 
 		core_mask = trace->getITCFlushMask();
 
-		for (int core = 0; core_mask != 0; core++) {
-			if (core_mask & 1) {
+		for (int core = 0; core_mask != 0; core++) 
+		{
+			if (core_mask & 1) 
+			{
 				s = trace->flushITCPrintStr(core,haveStr,startTime,endTime);
-				while (haveStr != false) {
-					if (firstPrint == false) {
+				while (haveStr != false)
+				 {
+					if (firstPrint == false) 
+					{
 						fprintf(fp, "\n");
 					}
 
-					if (srcbits > 0) {
+					if (srcbits > 0) 
+					{
 						fprintf(fp, "[%d] ",core);
 					}
 
 					std::cout << "ITC Print: ";
 
-					if ((startTime != 0) || (endTime != 0)) {
+					if ((startTime != 0) || (endTime != 0)) 
+					{
 						std::cout << "Msg Tics: <" << startTime << "-" << endTime << "> ";
 					}
 
@@ -1308,18 +1264,13 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 		}
 	}
 
-	if (analytics_detail > 0) {
-		if (trace != nullptr) {
+	if (analytics_detail > 0) 
+	{
+		if (trace != nullptr) 
+		{
 			trace->analyticsToText(dst,sizeof dst,analytics_detail);
-			if (firstPrint == false) {
-				fprintf(fp, "\n");
-			}
-			firstPrint = false;
-			fprintf(fp, "%s",dst);
-		}
-		if (sim != nullptr) {
-			sim->analyticsToText(dst,sizeof dst,analytics_detail);
-			if (firstPrint == false) {
+			if (firstPrint == false)
+			{
 				fprintf(fp, "\n");
 			}
 			firstPrint = false;
@@ -1329,6 +1280,440 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 	CleanUp();
 
 	return SIFIVE_TRACE_DECODER_OK;
+}
+*/
+TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, char* p_buff, const uint32_t size)
+{
+    if (out_file == nullptr) {
+        return SIFIVE_TRACE_DECODER_INPUT_ARG_NULL;
+    }
+
+    // reset members
+    trace = nullptr;
+    sim   = nullptr;
+    vcd   = nullptr;
+    fp    = nullptr;
+
+    // ---- Construct Trace (same logic) ----
+    if ((tf_name != nullptr) || (ef_name != nullptr) || (traceType == TraceDqr::TRACETYPE_BTM) || (traceType == TraceDqr::TRACETYPE_HTM))
+    {
+        TraceDqr::DQErr rc;
+        trace = new (std::nothrow) Trace(tf_name, ef_name, numAddrBits, addrDispFlags, srcbits, od_name, freq, m_timestamp_procesing_mechanism);
+        if (trace == nullptr) {
+            printf("Error: Could not create Trace object\n");
+            CleanUp();
+            return SIFIVE_TRACE_DECODER_MEM_CREATE_ERR;
+        }
+        if (trace->getStatus() != TraceDqr::DQERR_OK) {
+            printf("Error: new Trace(%s,%s) failed\n", tf_name, ef_name);
+            CleanUp();
+            return SIFIVE_TRACE_DECODER_TRACE_STATUS_ERROR;
+        }
+
+        trace->setTraceType(traceType);
+
+        if (ca_name != nullptr) {
+            rc = trace->setCATraceFile(ca_name, caType);
+            if (rc != TraceDqr::DQERR_OK) {
+                printf("Error: Could not set cycle accurate trace file\n");
+                CleanUp();
+                return SIFIVE_TRACE_DECODER_ERR;
+            }
+        }
+
+        trace->setTSSize(tssize);
+        trace->setPathType(pt);
+
+        if (cutPath != nullptr) {
+            rc = trace->subSrcPath(cutPath, newRoot);
+            if (rc != TraceDqr::DQERR_OK) {
+                printf("Error: Could not set cutPath or newRoot\n");
+                CleanUp();
+                return SIFIVE_TRACE_DECODER_ERR;
+            }
+        }
+
+        if (itcPrintOpts != TraceDqr::ITC_OPT_NLS) {
+            trace->setITCPrintOptions(itcPrintOpts, 4096, itcPrintChannel);
+        }
+
+        if (ctf_flag != false) {
+            rc = trace->enableCTFConverter(-1, nullptr);
+            if (rc != TraceDqr::DQERR_OK) {
+                printf("Error: Could not set CTF file\n");
+                CleanUp();
+                return SIFIVE_TRACE_DECODER_ERR;
+            }
+        }
+    }
+    else {
+        printf("Error: must specify either simulator file, trace file, SWT trace server, properties file, or base name\n");
+        CleanUp();
+        return SIFIVE_TRACE_DECODER_ERR;
+    }
+
+    // ---- Open output file ----
+    fp = fopen(out_file, "wb");
+    if (!fp) {
+        CleanUp();
+        return SIFIVE_TRACE_DECODER_CANNOT_OPEN_FILE;
+    }
+
+    // ---- Feed input buffer to trace ----
+    trace->SetFilePoiter(fp); // keep existing behavior as in your code
+    trace->PushTraceData(reinterpret_cast<uint8_t*>(p_buff), size);
+    trace->SetEndOfData();
+
+    // ---- Local decode state ----
+    Instruction*  instInfo = nullptr;
+    NexusMessage* msgInfo  = nullptr;
+    NexusMessage* nm       = nullptr;
+    Source*       srcInfo  = nullptr;
+
+    char dst[10000]; // scratch from your original code
+    int instlevel = 1;
+    const char*  lastSrcFile    = nullptr;
+    const char*  lastSrcLine    = nullptr;
+    unsigned int lastSrcLineNum = 0;
+    TraceDqr::ADDRESS lastAddress = 0;
+    int lastInstSize = 0;
+    bool firstPrint = true;
+    uint32_t core_mask = 0;
+    TraceDqr::TIMESTAMP startTime = 0, endTime = 0;
+
+    // ---- Output aggregation ----
+    std::vector<std::string> out_lines;
+    out_lines.reserve(32768);
+
+    // ---- Sticky instruction gate (fixes missing lines) ----
+    bool instr_window_on = false; // updated only when a new nm arrives
+
+    // ---- Main loop ----
+    TraceDqr::DQErr ec;
+    do {
+        instInfo = nullptr; msgInfo = nullptr; srcInfo = nullptr; nm = nullptr;
+
+        ec = trace->NextInstruction(&instInfo, &msgInfo, &srcInfo, &nm);
+        if (ec != TraceDqr::DQERR_OK) break;
+
+        // Update the sticky instruction window if a new message (nm) arrived
+        if (nm != nullptr) {
+            instr_window_on = (nm->offset >= m_trace_start_idx) && (nm->offset <= m_trace_stop_idx);
+        }
+
+        // Raw "Trace:" messages use their own offset each time
+        bool msg_in_range = false;
+        if (msgInfo != nullptr) {
+            msg_in_range = (msgInfo->offset >= m_trace_start_idx) && (msgInfo->offset <= m_trace_stop_idx);
+        }
+
+        // ---------- PROFILE OUTPUT (addresses only) ----------
+        if (profile_flag && trace != nullptr && instInfo != nullptr && instr_window_on) {
+            char line[64]; size_t pos = 0;
+            pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%llx", (unsigned long long)instInfo->address);
+            out_lines.emplace_back(line, line + pos);
+            firstPrint = false;
+        }
+
+        // ---------- SOURCE FILE / LINE HEADERS ----------
+        if (srcInfo != nullptr && instr_window_on) {
+            if ((lastSrcFile != srcInfo->sourceFile) || (lastSrcLine != srcInfo->sourceLine) || (lastSrcLineNum != srcInfo->sourceLineNum))
+            {
+                lastSrcFile = srcInfo->sourceFile;
+                lastSrcLine = srcInfo->sourceLine;
+                lastSrcLineNum = srcInfo->sourceLineNum;
+
+                if (file_flag && srcInfo->sourceFile != nullptr) {
+                    if (!firstPrint) out_lines.emplace_back(); // blank line
+
+                    const char* sfp = stripPath(strip_flag, srcInfo->sourceFile);
+                    int sfpl = 0, sfl = 0, stripped = 0;
+                    if (sfp != srcInfo->sourceFile) {
+                        sfpl = (int)strlen(sfp);
+                        sfl  = (int)strlen(srcInfo->sourceFile);
+                        stripped = sfl - sfpl;
+                    }
+
+                    char line[1024]; size_t pos = 0;
+                    if (srcbits > 0) {
+                        pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[%d] ", srcInfo->coreId);
+                    }
+
+                    if (stripped < srcInfo->cutPathIndex) {
+                        pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "File: [");
+                        if (sfp != srcInfo->sourceFile) {
+                            pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "..");
+                        }
+                        for (int i = stripped; i < srcInfo->cutPathIndex && pos + 1 < sizeof(line); ++i) {
+                            line[pos++] = srcInfo->sourceFile[i];
+                        }
+                        if (pos < sizeof(line)) line[pos] = '\0';
+                        pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "]%s:%u",
+                                                &srcInfo->sourceFile[srcInfo->cutPathIndex], srcInfo->sourceLineNum);
+                    } else {
+                        if (sfp != srcInfo->sourceFile) {
+                            pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "File: ..%s:%u", sfp, srcInfo->sourceLineNum);
+                        } else {
+                            pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "File: %s:%u", sfp, srcInfo->sourceLineNum);
+                        }
+                    }
+                    out_lines.emplace_back(line, line + pos);
+                    firstPrint = false;
+                }
+
+                if (src_flag && srcInfo->sourceLine != nullptr) {
+                    char line[1024]; size_t pos = 0;
+                    if (srcbits > 0) pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[%d] ", srcInfo->coreId);
+                    pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "Source: %s", srcInfo->sourceLine);
+                    out_lines.emplace_back(line, line + pos);
+                    firstPrint = false;
+                }
+            }
+        }
+
+        // ---------- DISASSEMBLY LINE ----------
+        if (dasm_flag && instInfo != nullptr && instr_window_on)
+        {
+            // address string
+            instInfo->addressToText(dst, sizeof dst, 0);
+            const char* addr_text = dst;
+
+            // optional function header
+            if (func_flag) {
+                if (((instInfo->addressLabel != nullptr) && (instInfo->addressLabelOffset == 0)) ||
+                    (instInfo->address != (lastAddress + lastInstSize / 8)))
+                {
+                    char hdr[512]; size_t p = 0;
+                    if (srcbits > 0) p += (size_t)snprintf(hdr + p, sizeof(hdr) - p, "[%d] ", instInfo->coreId);
+                    if (instInfo->addressLabel != nullptr) {
+                        p += (size_t)snprintf(hdr + p, sizeof(hdr) - p, "<%s", instInfo->addressLabel);
+                        if (instInfo->addressLabelOffset != 0)
+                            p += (size_t)snprintf(hdr + p, sizeof(hdr) - p, "+%x", instInfo->addressLabelOffset);
+                        p += (size_t)snprintf(hdr + p, sizeof(hdr) - p, ">");
+                    } else {
+                        p += (size_t)snprintf(hdr + p, sizeof(hdr) - p, "label null");
+                    }
+                    out_lines.emplace_back(hdr, hdr + p);
+                }
+                lastAddress = instInfo->address;
+                lastInstSize = instInfo->instSize;
+            }
+
+            // main disasm line
+            char line[4096]; size_t pos = 0;
+
+            if (srcbits > 0) pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[%d] ", instInfo->coreId);
+
+            // timestamp / CA flags
+            if (((vcd != nullptr) || (sim != nullptr) || (ca_name != nullptr)) && (instInfo->timestamp != 0)) {
+                size_t ts_start = pos;
+                pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "t:%u ", instInfo->timestamp);
+
+                if (instInfo->caFlags & (TraceDqr::CAFLAG_PIPE0 | TraceDqr::CAFLAG_PIPE1)) {
+                    if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE0)
+                        pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[0:%d", instInfo->pipeCycles);
+                    else if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE1)
+                        pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[1:%d", instInfo->pipeCycles);
+
+                    if (instInfo->caFlags & TraceDqr::CAFLAG_VSTART)
+                        pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "(%d)-%d(%dA,%dL,%dS)",
+                                                instInfo->qDepth, instInfo->VIStartCycles,
+                                                instInfo->arithInProcess, instInfo->loadInProcess, instInfo->storeInProcess);
+                    if (instInfo->caFlags & TraceDqr::CAFLAG_VARITH) pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "-%dA", instInfo->VIFinishCycles);
+                    if (instInfo->caFlags & TraceDqr::CAFLAG_VLOAD)  pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "-%dL", instInfo->VIFinishCycles);
+                    if (instInfo->caFlags & TraceDqr::CAFLAG_VSTORE) pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "-%dS", instInfo->VIFinishCycles);
+                    pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "] ");
+                }
+
+                size_t seg_len = pos - ts_start;
+                if (seg_len < 14) {
+                    size_t pad = 14 - seg_len;
+                    while (pad-- && pos + 1 < sizeof(line)) line[pos++] = ' ';
+                    if (pos < sizeof(line)) line[pos] = '\0';
+                }
+            } else if (vcd != nullptr) {
+                if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE0)      pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[0]");
+                else if (instInfo->caFlags & TraceDqr::CAFLAG_PIPE1) pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[1]");
+                else                                                 pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[?]");
+            }
+
+            // "    <addr>:" and pad that segment to width 20
+            size_t addr_start = pos;
+            pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "    %s:", addr_text);
+            size_t addr_len = pos - addr_start;
+            if (addr_len < 20) {
+                size_t pad = 20 - addr_len;
+                while (pad-- && pos + 1 < sizeof(line)) line[pos++] = ' ';
+                if (pos < sizeof(line)) line[pos] = '\0';
+            }
+
+            // instruction text
+            instInfo->instructionToText(dst, sizeof dst, instlevel);
+            pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "  %s", dst);
+
+            if (showBranches) {
+                switch (instInfo->brFlags) {
+                    case TraceDqr::BRFLAG_unknown:   pos += (size_t)snprintf(line + pos, sizeof(line) - pos, " [u]");  break;
+                    case TraceDqr::BRFLAG_taken:     pos += (size_t)snprintf(line + pos, sizeof(line) - pos, " [t]");  break;
+                    case TraceDqr::BRFLAG_notTaken:  pos += (size_t)snprintf(line + pos, sizeof(line) - pos, " [nt]"); break;
+                    default: break;
+                }
+            }
+
+            if (showCallsReturns && instInfo->CRFlag != TraceDqr::isNone) {
+                pos += (size_t)snprintf(line + pos, sizeof(line) - pos, " [");
+                const char* sep = "";
+                if (instInfo->CRFlag & TraceDqr::isCall)            { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sCall", sep);            sep = ","; }
+                if (instInfo->CRFlag & TraceDqr::isReturn)          { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sReturn", sep);         sep = ","; }
+                if (instInfo->CRFlag & TraceDqr::isSwap)            { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sSwap", sep);           sep = ","; }
+                if (instInfo->CRFlag & TraceDqr::isInterrupt)       { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sInterrupt", sep);      sep = ","; }
+                if (instInfo->CRFlag & TraceDqr::isException)       { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sException", sep);      sep = ","; }
+                if (instInfo->CRFlag & TraceDqr::isExceptionReturn) { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sException Return", sep); }
+                pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "]");
+            }
+
+            out_lines.emplace_back(line, line + pos);
+            firstPrint = false;
+        }
+
+        // ---------- RAW TRACE MESSAGE ----------
+        if ((trace != nullptr) && trace_flag && (msgInfo != nullptr) && msg_in_range)
+        {
+            // do not dump raw to stdout here (we're buffering)
+            msgInfo->messageToText(dst, sizeof dst, msgLevel);
+
+            if (!firstPrint) out_lines.emplace_back(); // blank line
+
+            char line[2048]; size_t pos = 0;
+            if (srcbits > 0) pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[%d] ", msgInfo->coreId);
+            pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "Trace: %s", dst);
+            out_lines.emplace_back(line, line + pos);
+            firstPrint = false;
+        }
+
+        // ---------- ITC PRINTS (during loop) ----------
+        if ((trace != nullptr) && (itcPrintOpts != TraceDqr::ITC_OPT_NONE))
+        {
+            std::string s; bool haveStr = false;
+
+            core_mask = trace->getITCPrintMask();
+            for (int core = 0; core_mask != 0; core++) {
+                if (core_mask & 1) {
+                    s = trace->getITCPrintStr(core, haveStr, startTime, endTime);
+                    while (haveStr) {
+                        if (!firstPrint) out_lines.emplace_back(); // blank line
+
+                        char line[4096]; size_t pos = 0;
+                        if (srcbits > 0) pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[%d] ", core);
+                        pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "ITC Print: ");
+                        if ((startTime != 0) || (endTime != 0)) {
+                            pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "Msg Tics: <%u-%u> ", startTime, endTime);
+                        }
+                        if (!s.empty()) {
+                            size_t cap = sizeof(line);
+                            size_t rem = (pos < cap) ? (cap - 1 - pos) : 0; // keep 1 for '\0'
+                            size_t to_copy = s.size();
+                            if (to_copy > rem) to_copy = rem;
+                            if (to_copy > 0) {
+                                memcpy(line + pos, s.data(), to_copy);
+                                pos += to_copy;
+                                line[pos] = '\0';
+                            }
+                        }
+                        out_lines.emplace_back(line, line + pos);
+                        firstPrint = false;
+
+                        s = trace->getITCPrintStr(core, haveStr, startTime, endTime);
+                    }
+                }
+                core_mask >>= 1;
+            }
+        }
+
+    } while (ec == TraceDqr::DQERR_OK);
+
+    if (ec == TraceDqr::DQERR_EOF) {
+        if (!firstPrint) out_lines.emplace_back(); // trailing blank line like original
+    } else {
+        printf("Error (%d) terminated trace decode\n", ec);
+        // best-effort flush of what we have
+        for (size_t i = 0; i < out_lines.size(); ++i) {
+            const std::string& s = out_lines[i];
+            if (!s.empty()) std::fwrite(s.data(), 1, s.size(), fp);
+            std::fputc('\n', fp);
+        }
+        CleanUp();
+        return SIFIVE_TRACE_DECODER_ERR;
+    }
+
+    // ---------- ITC PRINTS (flush after EOF) ----------
+    if ((trace != nullptr) && (itcPrintOpts != TraceDqr::ITC_OPT_NONE))
+    {
+        std::string s; bool haveStr = false;
+        core_mask = trace->getITCFlushMask();
+
+        for (int core = 0; core_mask != 0; core++) {
+            if (core_mask & 1) {
+                s = trace->flushITCPrintStr(core, haveStr, startTime, endTime);
+                while (haveStr) {
+                    if (!firstPrint) out_lines.emplace_back(); // blank line
+
+                    char line[4096]; size_t pos = 0;
+                    if (srcbits > 0) pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[%d] ", core);
+                    pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "ITC Print: ");
+                    if ((startTime != 0) || (endTime != 0)) {
+                        pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "Msg Tics: <%u-%u> ", startTime, endTime);
+                    }
+                    if (!s.empty()) {
+                        size_t cap = sizeof(line);
+                        size_t rem = (pos < cap) ? (cap - 1 - pos) : 0;
+                        size_t to_copy = s.size();
+                        if (to_copy > rem) to_copy = rem;
+                        if (to_copy > 0) {
+                            memcpy(line + pos, s.data(), to_copy);
+                            pos += to_copy;
+                            line[pos] = '\0';
+                        }
+                    }
+                    out_lines.emplace_back(line, line + pos);
+                    firstPrint = false;
+
+                    s = trace->flushITCPrintStr(core, haveStr, startTime, endTime);
+                }
+            }
+            core_mask >>= 1;
+        }
+    }
+
+    // ---------- ANALYTICS ----------
+    if (analytics_detail > 0) {
+        if (trace != nullptr) {
+            trace->analyticsToText(dst, sizeof dst, analytics_detail);
+            if (!firstPrint) out_lines.emplace_back(); // blank line
+            const char* p = dst;
+            while (*p) {
+                const char* nl = strchr(p, '\n');
+                if (nl) {
+                    out_lines.emplace_back(p, nl);
+                    p = nl + 1;
+                } else {
+                    out_lines.emplace_back(p);
+                    break;
+                }
+            }
+            firstPrint = false;
+        }
+    }
+
+    // ---------- WRITE ALL BUFFERED LINES ----------
+    for (size_t i = 0; i < out_lines.size(); ++i) {
+        const std::string& s = out_lines[i];
+        if (!s.empty()) std::fwrite(s.data(), 1, s.size(), fp);
+        std::fputc('\n', fp);
+    }
+
+    CleanUp();
+    return SIFIVE_TRACE_DECODER_OK;
 }
 
 

@@ -11,6 +11,7 @@
 #include <fstream>
 #include <cstring>
 #include <cstdint>
+#include <vector>
 
 #include "dqr.hpp"
 
@@ -167,7 +168,7 @@ private:
 	uint64_t m_trace_stop_idx = 0;	// Trace output will be generated only before this byte offset 
 
 	TySifiveTsProcessing m_timestamp_procesing_mechanism = TySifiveTsProcessing::TS_DEFAULT;
-
+  	std::vector<std::string> m_output_data_buffer;
 	virtual void CleanUp();
 public:
 	virtual TySifiveTraceDecodeError Configure(const TDecoderConfig& config);
