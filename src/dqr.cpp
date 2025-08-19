@@ -2349,6 +2349,7 @@ TraceDqr::DQErr ObjDump::parseSection(objDumpTokenType &nextType,char *nextLex,S
     	sp->align = align;
     	sp->startAddr = vma;
     	sp->endAddr = vma + sec_size - 1;
+		sp->next = nullptr;
 
     	codeSection = sp;
     }
@@ -2424,7 +2425,7 @@ TraceDqr::DQErr ObjDump::parseSectionList(ObjDump::objDumpTokenType &nextType,ch
     }
 
     do {
-    	Section *newSection;
+    	Section *newSection = nullptr;
     	TraceDqr::DQErr rc;
 
     	rc = parseSection(type,lex,newSection);
