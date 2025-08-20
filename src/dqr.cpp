@@ -7843,12 +7843,15 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_INDIRECT:
 				bt = "Indirect";
 				break;
-			case TraceDqr::BTYPE_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
+				bt = "Exception or Interrupt";
+				break;
+			case TraceDqr::BTYPE_EXT_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_HARDWARE:
-				bt = "Hardware";
-				break;
+			case TraceDqr::BTYPE_EXT_INTERRUPT:
+				bt = "Interrupt";
+				break;				
 			case TraceDqr::BTYPE_UNDEFINED:
 				bt = "Undefined";
 				break;
@@ -8023,12 +8026,15 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_INDIRECT:
 				bt = "Indirect";
 				break;
-			case TraceDqr::BTYPE_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
+				bt = "Exception or Interrupt";
+				break;
+			case TraceDqr::BTYPE_EXT_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_HARDWARE:
-				bt = "Hardware";
-				break;
+			case TraceDqr::BTYPE_EXT_INTERRUPT:
+				bt = "Interrupt";
+				break;					
 			case TraceDqr::BTYPE_UNDEFINED:
 				bt = "Undefined";
 				break;
@@ -8136,12 +8142,15 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_INDIRECT:
 				bt = "Indirect";
 				break;
-			case TraceDqr::BTYPE_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
+				bt = "Exception or Interrupt";
+				break;
+			case TraceDqr::BTYPE_EXT_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_HARDWARE:
-				bt = "Hardware";
-				break;
+			case TraceDqr::BTYPE_EXT_INTERRUPT:
+				bt = "Interrupt";
+				break;					
 			case TraceDqr::BTYPE_UNDEFINED:
 				bt = "Undefined";
 				break;
@@ -8203,12 +8212,15 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_INDIRECT:
 				bt = "Indirect";
 				break;
-			case TraceDqr::BTYPE_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
+				bt = "Exception or Interrupt";
+				break;
+			case TraceDqr::BTYPE_EXT_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_HARDWARE:
-				bt = "Hardware";
-				break;
+			case TraceDqr::BTYPE_EXT_INTERRUPT:
+				bt = "Interrupt";
+				break;					
 			case TraceDqr::BTYPE_UNDEFINED:
 				bt = "Undefined";
 				break;

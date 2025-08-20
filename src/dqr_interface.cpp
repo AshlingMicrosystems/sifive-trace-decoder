@@ -1034,7 +1034,8 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
         {
             msgInfo->messageToText(dst, sizeof dst, msgLevel);
 
-            const bool is_hw2   = (strstr(dst, "Branch Type: Hardware (2)") != nullptr);
+            const bool is_excep_or_intr   = ((strstr(dst, "Branch Type: Exception (2)") != nullptr) || 
+											(strstr(dst, "Branch Type: Interrupt (3)") != nullptr));
             const bool is_trap0 = (strstr(dst, "TCode: TRAP INFO") != nullptr) &&
                                   (strstr(dst, "Trap Value: 0")   != nullptr);
 
@@ -1045,7 +1046,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
             pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "Trace: %s", dst);
 
             if (!la_active) {
-                if (!is_hw2) {
+                if (!is_excep_or_intr) {
                     // Normal Trace → append & flush immediately
                     out_lines.emplace_back(line, line + pos);
                     firstPrint = false;
