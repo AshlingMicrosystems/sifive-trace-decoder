@@ -2540,9 +2540,8 @@ ObjDump::objDumpTokenType ObjDump::getRestOfLine(char *lex)
 
 TraceDqr::DQErr ObjDump::parseFileOrLabelOrDisassembly(line_t &lineType, char *text, int &length, uint32_t &value)
 {
-    objDumpTokenType type;
-    char lex[256];
-    uint64_t n;
+    objDumpTokenType type = odtt_error;
+    char lex[256] = {0};
 
     type = getNextLex(lex);
 
@@ -2615,7 +2614,7 @@ TraceDqr::DQErr ObjDump::parseFileOrLabelOrDisassembly(line_t &lineType, char *t
 		}
 		numbuf[i] = 0;
 
-		uint64_t n;
+		uint64_t n = 0;
 		if (!isStringADecNumber(numbuf, n)) {
 			printf("Error: parseFileOrLabelOrDisassembly(): invalid line number\n");
 			return TraceDqr::DQERR_ERR;
@@ -2628,7 +2627,7 @@ TraceDqr::DQErr ObjDump::parseFileOrLabelOrDisassembly(line_t &lineType, char *t
 		return TraceDqr::DQERR_OK;
 	}
 
-
+	printf("Error: parseFileOrLabelOrDisassembly(): unexpected token type %d\n", type);
     return TraceDqr::DQERR_ERR;
 }
 
