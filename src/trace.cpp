@@ -8421,12 +8421,12 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					break;
 				case TraceDqr::TCODE_INCIRCUITTRACE_WS:
 					if ((nm.ictWS.cksrc == TraceDqr::ICT_EXCEPTION) || (nm.ictWS.cksrc == TraceDqr::ICT_INTERRUPT)) {
-						b_type = TraceDqr::BTYPE_EXCEPTION;
+						b_type = TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT;
 					}
 					break;
 				case TraceDqr::TCODE_INCIRCUITTRACE:
 					if ((nm.ict.cksrc == TraceDqr::ICT_EXCEPTION) || (nm.ict.cksrc == TraceDqr::ICT_INTERRUPT)) {
-						b_type = TraceDqr::BTYPE_EXCEPTION;
+						b_type = TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT;
 					}
 					break;
 				case TraceDqr::TCODE_INDIRECT_BRANCH_WS:
@@ -8449,7 +8449,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					break;
 				}
 
-				if (b_type == TraceDqr::BTYPE_EXCEPTION) {
+				if (b_type == TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT) {
 					enterISR[currentCore] = TraceDqr::isInterrupt;
 				}
 
