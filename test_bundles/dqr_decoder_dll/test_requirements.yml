@@ -5,13 +5,26 @@
 
 tests:
 
-  # ----- UNIT TESTS -----
-  unit_tests:
-    SiFive_decoder_library_test:
-      repositories:
-        - name: sifive_trace_decoder
-          components:
-            - name: dqr_decoder_dll
+ #------------------------------------ SOFTWARE TESTS ------------------------------------
+  software:
 
-  # ----- INTEGRATION TESTS -----
-  integration_tests:
+    # ----- UNIT TESTS -----
+    unit:
+
+      SiFive_decoder_library_test:
+        repositories:
+          - name: sifive-trace-decoder
+            components:
+              - dqr_decoder_dll
+
+    # ----- INTEGRATION TESTS -----
+    integration:
+
+ #------------------------------------ HARDWARE TESTS ------------------------------------
+  hardware:
+
+    # ----- UNIT TESTS -----
+    unit:
+
+    # ----- INTEGRATION TESTS -----
+    integration:
