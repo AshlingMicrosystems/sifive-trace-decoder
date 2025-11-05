@@ -1,47 +1,70 @@
-# Copyright SiFive 2021
-# This is a workflow file to test the functionality of the trace-decoder using tests
-# provided in github.com/sifive/trace-decoder-tests. For Internal Use Only.
-
 name: DQR_Tests
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
   push:
-    branches: [ master ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ master ]
-
-  # Allows you to run this workflow manually from the Actions tab
+    branches: [ "master" ]
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build_and_test:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+    # Step 1: Checkout source
+    - uses: actions/checkout@v4
 
-      - name: Clean DQR
-        run: make clean
+    # Step 2: Clean and build DQR
+    - name: Build DQR
+      run: |
+        echo "🔹 Cleaning and building DQR..."
+        make clean
+        make && make install
+        echo "✅ Build complete."
 
-      - name: Make DQR
-        run: make && make install
+    # Step 3: Fetch trace-decoder tests
+    - name: Get DQR Tests
+      run: |
+        echo "🔹 Cloning trace-decoder-tests..."
+        git clone https://github.com/sifive/trace-decoder-tests
+        echo "✅ Tests downloaded."
 
-      - name: Get DQR Tests
-        run: git clone https://github.com/sifive/trace-decoder-tests
+    # Step 4: Clean test environment
+    - name: Clean test environment
+      run: |
+        cd trace-decoder-tests
+        make clean
 
-      - name: Clean test enviroment
-        run: cd ./trace-decoder-tests && make clean
+    # Step 5: Run tests
+    - name: Run DQR Tests
+      run: |
+        cd trace-decoder-tests
+        echo "🔹 Running DQR tests..."
+        make DQRPATH=$(pwd)/../install
+        echo "✅ Tests completed."
 
-      - name: List Directory
-        run: ls
+    # Step 6: Prepare artifacts
+    - name: Prepare artifacts
+      run: |
+        echo "🔹 Preparing artifacts..."
+        mkdir -p "$GITHUB_WORKSPACE/artifacts/DQR"
+        
+        # Copy test results (if generated)
+        if [ -f "trace-decoder-tests/result.log" ]; then
+          cp "trace-decoder-tests/result.log" "$GITHUB_WORKSPACE/artifacts/DQR/"
+        fi
+        
+        # Copy build/install directory contents (the DQR binaries/libraries)
+        if [ -d "install" ]; then
+          cp -r install/* "$GITHUB_WORKSPACE/artifacts/DQR/"
+        fi
 
-      - name: Test DQR
-        run: cd ./trace-decoder-tests && make DQRPATH=$(pwd)/../install && cat result.log
+        echo "✅ Artifacts prepared."
 
+    # Step 7: Upload artifacts for GitLab or manual retrieval
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: DQR-artifacts
+        path: ${{ github.workspace }}/artifacts/DQR/
