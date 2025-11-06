@@ -5,7 +5,10 @@ on:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
-  workflow_dispatch:    # 👈 Allows manual/API triggers (e.g. from GitLab)
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build-sifive-decoder:
@@ -15,40 +18,40 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Allow access to Ashling private repos
+      run: |
+        git config --global url."https://${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+    - name: Clone trace-decoder-tests
+      run: |
+        echo "🔹 Cloning trace-decoder-tests..."
+        git clone https://github.com/AshlingMicrosystems/trace-decoder-tests.git
+        echo "✅ Clone successful"
+
     - name: Build Sifive Decoder
       run: |
-        echo "Building Sifive Decoder"
-        echo "Current directory:"
-        pwd
-        echo "Directory contents:"
-        ls -la
-        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
-
-        # Navigate to decoder root directory
-        cd "$GITHUB_WORKSPACE/project/linux/utility/trace"
-        echo "Changed to trace utility directory:"
+        echo "🔹 Building Sifive Decoder"
+        cd "$GITHUB_WORKSPACE"
+        echo "Changed to repository root:"
         pwd
 
-        # Clean and build libtrace.so
+        # Clean and build the main decoder project
         make CONFIG=Release clean
         make CONFIG=Release all
 
-        # Now build the Sifive Trace Decoder core library
-        cd "$GITHUB_WORKSPACE"
-        echo "Building Sifive Trace Decoder core library..."
+        # Clean and build libtrace.so inside the cloned trace-decoder-tests project
+        echo "🔹 Building libtrace.so from trace-decoder-tests"
+        cd "$GITHUB_WORKSPACE/trace-decoder-tests"
         make CONFIG=Release clean
         make CONFIG=Release all
 
     - name: Prepare artifacts
       run: |
         echo "Preparing Sifive Trace Decoder artifacts..."
-        echo "Current directory:"
-        pwd
-
-        TRACE_LIB="$GITHUB_WORKSPACE/project/linux/utility/trace/Release/libtrace.so"
+        TRACE_LIB="$GITHUB_WORKSPACE/trace-decoder-tests/Release/libtrace.so"
         DECODER_LIB="$GITHUB_WORKSPACE/Release/libdqr.so"
 
-        # Validate build outputs
+        # Validate outputs
         if [ ! -f "$TRACE_LIB" ]; then
           echo "❌ libtrace.so not found!"
           exit 1
@@ -58,18 +61,14 @@ jobs:
           exit 1
         fi
 
-        # Create artifacts directory
         mkdir -p "$GITHUB_WORKSPACE/artifacts/SifiveDecoder"
-
-        # Copy libraries
         cp "$TRACE_LIB" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/libtrace.so"
         cp "$DECODER_LIB" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/libdqr.so"
-
-        echo "✅ Artifacts prepared successfully:"
+        echo "✅ Artifacts ready:"
         ls -l "$GITHUB_WORKSPACE/artifacts/SifiveDecoder"
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: SifiveDecoder-libs       # 👈 Artifact name for GitLab or downstream jobs
+        name: SifiveDecoder-libs
         path: ${{ github.workspace }}/artifacts/SifiveDecoder/
