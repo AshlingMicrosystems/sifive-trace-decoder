@@ -1,70 +1,75 @@
-name: DQR_Tests
+name: Sifive Trace Decoder CI
 
 on:
   push:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
-  workflow_dispatch:
+  workflow_dispatch:    # 👈 Allows manual/API triggers (e.g. from GitLab)
 
 jobs:
-  build_and_test:
+  build-sifive-decoder:
+    name: Build Sifive Trace Decoder
     runs-on: ubuntu-latest
 
     steps:
-    # Step 1: Checkout source
     - uses: actions/checkout@v4
 
-    # Step 2: Clean and build DQR
-    - name: Build DQR
+    - name: Build Sifive Decoder
       run: |
-        echo "🔹 Cleaning and building DQR..."
-        make clean
-        make && make install
-        echo "✅ Build complete."
+        echo "Building Sifive Decoder"
+        echo "Current directory:"
+        pwd
+        echo "Directory contents:"
+        ls -la
+        echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
 
-    # Step 3: Fetch trace-decoder tests
-    - name: Get DQR Tests
-      run: |
-        echo "🔹 Cloning trace-decoder-tests..."
-        git clone https://github.com/sifive/trace-decoder-tests
-        echo "✅ Tests downloaded."
+        # Navigate to decoder root directory
+        cd "$GITHUB_WORKSPACE/project/linux/utility/trace"
+        echo "Changed to trace utility directory:"
+        pwd
 
-    # Step 4: Clean test environment
-    - name: Clean test environment
-      run: |
-        cd trace-decoder-tests
-        make clean
+        # Clean and build libtrace.so
+        make CONFIG=Release clean
+        make CONFIG=Release all
 
-    # Step 5: Run tests
-    - name: Run DQR Tests
-      run: |
-        cd trace-decoder-tests
-        echo "🔹 Running DQR tests..."
-        make DQRPATH=$(pwd)/../install
-        echo "✅ Tests completed."
+        # Now build the Sifive Trace Decoder core library
+        cd "$GITHUB_WORKSPACE"
+        echo "Building Sifive Trace Decoder core library..."
+        make CONFIG=Release clean
+        make CONFIG=Release all
 
-    # Step 6: Prepare artifacts
     - name: Prepare artifacts
       run: |
-        echo "🔹 Preparing artifacts..."
-        mkdir -p "$GITHUB_WORKSPACE/artifacts/DQR"
-        
-        # Copy test results (if generated)
-        if [ -f "trace-decoder-tests/result.log" ]; then
-          cp "trace-decoder-tests/result.log" "$GITHUB_WORKSPACE/artifacts/DQR/"
+        echo "Preparing Sifive Trace Decoder artifacts..."
+        echo "Current directory:"
+        pwd
+
+        TRACE_LIB="$GITHUB_WORKSPACE/project/linux/utility/trace/Release/libtrace.so"
+        DECODER_LIB="$GITHUB_WORKSPACE/Release/libdqr.so"
+
+        # Validate build outputs
+        if [ ! -f "$TRACE_LIB" ]; then
+          echo "❌ libtrace.so not found!"
+          exit 1
         fi
-        
-        # Copy build/install directory contents (the DQR binaries/libraries)
-        if [ -d "install" ]; then
-          cp -r install/* "$GITHUB_WORKSPACE/artifacts/DQR/"
+        if [ ! -f "$DECODER_LIB" ]; then
+          echo "❌ libdqr.so not found!"
+          exit 1
         fi
 
-        echo "✅ Artifacts prepared."
+        # Create artifacts directory
+        mkdir -p "$GITHUB_WORKSPACE/artifacts/SifiveDecoder"
 
-    # Step 7: Upload artifacts for GitLab or manual retrieval
+        # Copy libraries
+        cp "$TRACE_LIB" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/libtrace.so"
+        cp "$DECODER_LIB" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/libdqr.so"
+
+        echo "✅ Artifacts prepared successfully:"
+        ls -l "$GITHUB_WORKSPACE/artifacts/SifiveDecoder"
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: DQR-artifacts
-        path: ${{ github.workspace }}/artifacts/DQR/
+        name: SifiveDecoder-libs       # 👈 Artifact name for GitLab or downstream jobs
+        path: ${{ github.workspace }}/artifacts/SifiveDecoder/
