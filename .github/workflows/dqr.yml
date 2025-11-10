@@ -42,6 +42,7 @@ jobs:
 
         TRACE_LIB="$GITHUB_WORKSPACE/Release/libtrace.so"
         DECODER_LIB="$GITHUB_WORKSPACE/Release/libdqr.so"
+        OBJDUMP_BIN="$GITHUB_WORKSPACE/bin/linux/objdump/riscv64-unknown-elf-objdump"
 
         # Validate outputs
         FOUND=0
@@ -51,6 +52,10 @@ jobs:
         fi
         if [ -f "$DECODER_LIB" ]; then
           echo "✅ Found libdqr.so"
+          FOUND=1
+        fi
+         if [ -f "$OBJDUMP_BIN" ]; then
+          echo "✅ Found riscv64-unknown-elf-objdump"
           FOUND=1
         fi
         if [ $FOUND -eq 0 ]; then
@@ -64,6 +69,7 @@ jobs:
         # Copy whichever files exist
         [ -f "$TRACE_LIB" ] && cp "$TRACE_LIB" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/"
         [ -f "$DECODER_LIB" ] && cp "$DECODER_LIB" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/"
+        [ -f "$OBJDUMP_BIN" ] && cp "$OBJDUMP_BIN" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/"
 
         echo "✅ Artifacts prepared successfully:"
         ls -l "$GITHUB_WORKSPACE/artifacts/SifiveDecoder"
