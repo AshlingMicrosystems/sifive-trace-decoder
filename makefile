@@ -1,45 +1,81 @@
+# ==========================================================
+#   Makefile for building dqr.dll (MSYS2 + PowerShell)
+#   - Uses JNIINCLUDE env variable for Java headers
+#   - Keeps com/ folder
+#   - Works with MSYS make under PowerShell
+# ==========================================================
 
-ifeq ($(INSTALLPATH),)
-        INSTALLABSPATH := $(realpath ./.)/install
-else
-        $(shell (mkdir -p "$(INSTALLPATH)"))
-        INSTALLABSPATH := $(realpath $(INSTALLPATH))
+OUT_DIR     := Release
+SRC_DIR     := src
+INC_DIR     := include
+CXX         := g++
+SWIG        := swig
+DECODER_VER := 0.17.0
+
+# ==========================================================
+#   Environment / Paths
+# ==========================================================
+# Expect JNIINCLUDE to be set in environment (Windows-style path)
+# e.g.  setx JNIINCLUDE "C:\Program Files\Java\jdk-22\include"
+# Convert it to MSYS-compatible form if available
+ifeq ($(JNIINCLUDE),)
+    $(error ❌ JNIINCLUDE environment variable is not set!)
 endif
 
-TOPTARGETS := all clean install
+JNIINCLUDE_MSYS := $(shell cygpath -u "$(JNIINCLUDE)")
 
-SUBDIRS := Debug Release
+# ==========================================================
+#   Flags
+# ==========================================================
+CXXFLAGS  := -I"$(INC_DIR)" -D WINDOWS -std=c++11 -DDLL_EXPORT -DDECODER_VERSION=\"$(DECODER_VER)\" -Wall -Wformat=0
+LDFLAGS   := -shared -lws2_32
+SWIGFLAGS := -c++ -java -package com.sifive.trace -outdir com/sifive/trace -I"$(INC_DIR)"
 
-CONFIG := Debug
+CPP_SRCS  := $(SRC_DIR)/dqr.cpp $(SRC_DIR)/trace.cpp $(SRC_DIR)/vcd.cpp $(SRC_DIR)/dqr_interface.cpp
+OBJS      := $(OUT_DIR)/dqr.o $(OUT_DIR)/trace.o $(OUT_DIR)/vcd.o $(OUT_DIR)/dqr_interface.o
+SWIG_CPP  := $(OUT_DIR)/dqr_wrap.cpp
+SWIG_OBJ  := $(OUT_DIR)/dqr_wrap.o
+TARGET    := $(OUT_DIR)/dqr.dll
 
-CROSSPREFIX :=
+# ==========================================================
+#   Default target
+# ==========================================================
+all: $(TARGET)
+	@echo "============================================="
+	@echo "✅ Successfully built $(TARGET)"
+	@echo "============================================="
 
-include version.mk
+# ==========================================================
+#   Build steps
+# ==========================================================
+dirs:
+	mkdir -p "$(OUT_DIR)"
+	mkdir -p com/sifive/trace
 
-$(TOPTARGETS): $(CONFIG)
+$(OUT_DIR)/%.o: $(SRC_DIR)/%.cpp | dirs
+	@echo "Compiling $<"
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-$(CONFIG):
-	$(MAKE) -C $@ $(MAKECMDGOALS) INSTALLPATH="$(INSTALLABSPATH)"
+$(SWIG_CPP): $(INC_DIR)/dqr.i | dirs
+	@echo "Running SWIG to generate wrapper..."
+	mkdir -p com/sifive/trace
+	$(SWIG) $(SWIGFLAGS) -o "$(SWIG_CPP)" "$(INC_DIR)/dqr.i"
 
-Release:
-	$(MAKE) -C Release $(MAKECMDGOALS) INSTALLPATH="$(INSTALLABSPATH)"
+$(SWIG_OBJ): $(SWIG_CPP)
+	@echo "Compiling SWIG wrapper using JNIINCLUDE=$(JNIINCLUDE)"
+	$(CXX) $(CXXFLAGS) -c "$(SWIG_CPP)" -o "$(SWIG_OBJ)" \
+		-I"$(JNIINCLUDE_MSYS)" \
+		-I"$(JNIINCLUDE_MSYS)/win32"
 
-install: install-include install-examples install-scripts
+$(TARGET): $(OBJS) $(SWIG_OBJ)
+	@echo "Linking DLL..."
+	$(CXX) $(OBJS) $(SWIG_OBJ) -o "$(TARGET)" $(LDFLAGS)
 
-install-include:
-	mkdir -p "$(INSTALLABSPATH)/include"
-	cp -rp include/dqr.hpp "$(INSTALLABSPATH)/include"
+# ==========================================================
+#   Clean — keep com/
+# ==========================================================
+clean:
+	@echo "Cleaning compiled objects (keeping com/)..."
+	rm -f $(OUT_DIR)/*.o $(OUT_DIR)/*.d $(OUT_DIR)/*.dll $(OUT_DIR)/*.exe $(OUT_DIR)/*.cpp
 
-install-examples:
-	mkdir -p "$(INSTALLABSPATH)"
-	cp -rp examples "$(INSTALLABSPATH)"
-
-install-scripts:
-	mkdir -p "$(INSTALLABSPATH)"
-	cp -rp scripts "$(INSTALLABSPATH)"
-
-clean clean-all:
-	$(MAKE) -C Debug clean
-	$(MAKE) -C Release clean
-
-.PHONY: $(TOPTARGETS) $(CONFIG) clean-all Release install clean
+.PHONY: all clean dirs
