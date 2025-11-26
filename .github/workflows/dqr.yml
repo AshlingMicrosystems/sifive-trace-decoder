@@ -54,7 +54,7 @@ jobs:
           echo "✅ Found libdqr.so"
           FOUND=1
         fi
-         if [ -f "$OBJDUMP_BIN" ]; then
+        if [ -f "$OBJDUMP_BIN" ]; then
           echo "✅ Found riscv64-unknown-elf-objdump"
           FOUND=1
         fi
