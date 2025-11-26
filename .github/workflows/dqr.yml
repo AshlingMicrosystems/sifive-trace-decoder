@@ -59,7 +59,7 @@ jobs:
           FOUND=1
         fi
         if [ $FOUND -eq 0 ]; then
-          echo "❌ No .so files found in Release/"
+          echo "❌ Required build artifacts not found"
           exit 1
         fi
 
