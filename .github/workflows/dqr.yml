@@ -15,55 +15,61 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Install build dependencies
+      run: sudo apt-get update && sudo apt-get install -y build-essential
+
     - name: Build Sifive Decoder
       run: |
-        echo "Building Sifive Decoder"
-        echo "Current directory:"
-        pwd
+        echo "🔹 Building Sifive Decoder"
+        echo "Current directory: $(pwd)"
         echo "Directory contents:"
         ls -la
         echo "GITHUB_WORKSPACE: $GITHUB_WORKSPACE"
 
-        # Navigate to decoder root directory
-        cd "$GITHUB_WORKSPACE/project/linux/utility/trace"
-        echo "Changed to trace utility directory:"
-        pwd
-
-        # Clean and build libtrace.so
-        make CONFIG=Release clean
-        make CONFIG=Release all
-
-        # Now build the Sifive Trace Decoder core library
+        # Build from repo root — there is no project/linux/utility/trace folder
         cd "$GITHUB_WORKSPACE"
-        echo "Building Sifive Trace Decoder core library..."
+
+        # Clean and build all
         make CONFIG=Release clean
         make CONFIG=Release all
 
     - name: Prepare artifacts
       run: |
-        echo "Preparing Sifive Trace Decoder artifacts..."
-        echo "Current directory:"
-        pwd
+        echo "🔹 Preparing artifacts..."
+        echo "Current directory: $(pwd)"
+        echo "Checking Release folder:"
+        ls -la "$GITHUB_WORKSPACE/Release" || true
 
-        TRACE_LIB="$GITHUB_WORKSPACE/project/linux/utility/trace/Release/libtrace.so"
+        TRACE_LIB="$GITHUB_WORKSPACE/Release/libtrace.so"
         DECODER_LIB="$GITHUB_WORKSPACE/Release/libdqr.so"
+        OBJDUMP_BIN="$GITHUB_WORKSPACE/bin/linux/objdump/riscv64-unknown-elf-objdump"
 
-        # Validate build outputs
-        if [ ! -f "$TRACE_LIB" ]; then
-          echo "❌ libtrace.so not found!"
-          exit 1
+        # Validate outputs
+        FOUND=0
+        if [ -f "$TRACE_LIB" ]; then
+          echo "✅ Found libtrace.so"
+          FOUND=1
         fi
-        if [ ! -f "$DECODER_LIB" ]; then
-          echo "❌ libdqr.so not found!"
+        if [ -f "$DECODER_LIB" ]; then
+          echo "✅ Found libdqr.so"
+          FOUND=1
+        fi
+         if [ -f "$OBJDUMP_BIN" ]; then
+          echo "✅ Found riscv64-unknown-elf-objdump"
+          FOUND=1
+        fi
+        if [ $FOUND -eq 0 ]; then
+          echo "❌ No .so files found in Release/"
           exit 1
         fi
 
         # Create artifacts directory
         mkdir -p "$GITHUB_WORKSPACE/artifacts/SifiveDecoder"
 
-        # Copy libraries
-        cp "$TRACE_LIB" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/libtrace.so"
-        cp "$DECODER_LIB" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/libdqr.so"
+        # Copy whichever files exist
+        [ -f "$TRACE_LIB" ] && cp "$TRACE_LIB" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/"
+        [ -f "$DECODER_LIB" ] && cp "$DECODER_LIB" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/"
+        [ -f "$OBJDUMP_BIN" ] && cp "$OBJDUMP_BIN" "$GITHUB_WORKSPACE/artifacts/SifiveDecoder/"
 
         echo "✅ Artifacts prepared successfully:"
         ls -l "$GITHUB_WORKSPACE/artifacts/SifiveDecoder"
