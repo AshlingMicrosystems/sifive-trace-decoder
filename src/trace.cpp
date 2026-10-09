@@ -5755,7 +5755,8 @@ TraceDqr::DQErr Trace::setTSSize(int size)
 
 TraceDqr::TIMESTAMP Trace::processTS(TraceDqr::tsType tstype, TraceDqr::TIMESTAMP lastTs, TraceDqr::TIMESTAMP newTs)
 {
-	if(m_timestamp_procesing_mechanism == TySifiveTsProcessing::TS_TT)
+	// Every message carries the absolute timestamp, no reconstruction needed
+	if(m_timestamp_procesing_mechanism == TySifiveTsProcessing::TS_ABSOLUTE)
 	{
 		return newTs;
 	}
@@ -5778,9 +5779,14 @@ TraceDqr::TIMESTAMP Trace::processTS(TraceDqr::tsType tstype, TraceDqr::TIMESTAM
         }
     } 
     else if (tstype == TraceDqr::TS_rel && lastTs != 0) {
-        // Add relative offset to the last timestamp
-        ts = lastTs + newTs;
-    } 
+        if (m_timestamp_procesing_mechanism == TySifiveTsProcessing::TS_RELATIVE_XOR) {
+            // Encoder sends only the bits that changed since the last timestamp
+            ts = lastTs ^ newTs;
+        } else {
+            // RISC-V N-Trace spec: add relative offset to the last timestamp
+            ts = lastTs + newTs;
+        }
+    }
     else {
         // If lastTs is not valid or unknown type, return 0
         printf("Warning: Invalid timestamp type [%d] or uninitialized lastTs.\n", tstype);

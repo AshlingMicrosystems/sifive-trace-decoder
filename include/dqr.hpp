@@ -24,8 +24,10 @@ extern const char * const DQR_VERSION;
 
 typedef enum
 {
-	TS_DEFAULT = 0,
-	TS_TT
+	// How the TSTAMP field of trace messages is interpreted
+	TS_RELATIVE_ADD = 0,	// RISC-V N-Trace spec: sync messages carry absolute value, others ts = last + TSTAMP
+	TS_ABSOLUTE = 1,		// Every message with a TSTAMP carries the absolute value
+	TS_RELATIVE_XOR = 2		// Sync messages carry absolute value, others ts = last ^ TSTAMP
 } TySifiveTsProcessing;
 
 class CTF {
@@ -823,7 +825,7 @@ private:
 
 class Trace {
 public:
-    Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq = 0, TySifiveTsProcessing timestamp_procesing_mechanism = TS_DEFAULT);
+    Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq = 0, TySifiveTsProcessing timestamp_procesing_mechanism = TS_RELATIVE_ADD);
     Trace(char *mf_ame);
     ~Trace();
     void cleanUp();
@@ -942,7 +944,7 @@ private:
 	class CATrace   *caTrace;
 	TraceDqr::TIMESTAMP lastCycle[DQR_MAXCORES];
 	int               eCycleCount[DQR_MAXCORES];
-	TySifiveTsProcessing m_timestamp_procesing_mechanism = TySifiveTsProcessing::TS_DEFAULT;
+	TySifiveTsProcessing m_timestamp_procesing_mechanism = TySifiveTsProcessing::TS_RELATIVE_ADD;
 
 	TraceDqr::DQErr configure(class TraceSettings &settings);
 
