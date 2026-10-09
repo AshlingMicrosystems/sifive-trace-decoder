@@ -2917,6 +2917,9 @@ TraceDqr::DQErr EventConverter::emitCallRet(int core,TraceDqr::TIMESTAMP ts,int 
 		if (crFlags & TraceDqr::isCall) {
 			n = snprintf(msgBuff,sizeof msgBuff,"[%d] %d [Call] PC=0x%08x PCDest=[0x%08x]",core,ts,pc,pcDest);
 		}
+		else if ((crFlags & TraceDqr::isInterrupt) && (crFlags & TraceDqr::isException)) {
+			n = snprintf(msgBuff,sizeof msgBuff,"[%d] %d [Exception or Interrupt] PC=0x%08x PCDest=[0x%08x]",core,ts,pc,pcDest);
+		}
 		else if (crFlags & TraceDqr::isInterrupt) {
 			n = snprintf(msgBuff,sizeof msgBuff,"[%d] %d [Interrupt] PC=0x%08x PCDest=[0x%08x]",core,ts,pc,pcDest);
 		}
@@ -5124,7 +5127,7 @@ Trace::Trace(char *mf_name)
 	status = TraceDqr::DQERR_OK;
 }
 
-Trace::Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq, TySifiveTsProcessing timestamp_procesing_mechanism)
+Trace::Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq, TySifiveTsProcessing timestamp_procesing_mechanism, TySifiveBTypeEncoding btype_encoding)
 {
 	TraceDqr::DQErr rc;
 	TraceSettings ts;
@@ -5145,6 +5148,7 @@ Trace::Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,
 	perfConverter = nullptr;
 	objdump       = nullptr;
 	m_timestamp_procesing_mechanism = timestamp_procesing_mechanism;
+	m_btype_encoding = btype_encoding;
 
 	ts.propertyToTFName(tf_name);
 	ts.propertyToEFName(ef_name);
@@ -5232,7 +5236,7 @@ TraceDqr::DQErr Trace::configure(TraceSettings &settings)
 		strcpy(rtdName,settings.tfName);
 	}
 
-	sfp = new (std::nothrow) SliceFileParser(settings.tfName,srcbits);
+	sfp = new (std::nothrow) SliceFileParser(settings.tfName,srcbits,m_btype_encoding);
 
 	if (sfp == nullptr) {
 		printf("Error: Trace::configure(): Could not create SliceFileParser object\n");
@@ -8416,7 +8420,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					*srcInfo = &sourceInfo;
 				}
 
-				// I don't think the b_type code below actaully does anything??? Remove??
+				// Use b_type to flag the first instruction of a trap handler (enterISR)
 
 				TraceDqr::BType b_type;
 				b_type = TraceDqr::BTYPE_UNDEFINED;
@@ -8455,8 +8459,19 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					break;
 				}
 
-				if (b_type == TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT) {
+				switch (b_type) {
+				case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
+					// Encoder does not say which, so flag both
+					enterISR[currentCore] = TraceDqr::isException | TraceDqr::isInterrupt;
+					break;
+				case TraceDqr::BTYPE_EXT_EXCEPTION:
+					enterISR[currentCore] = TraceDqr::isException;
+					break;
+				case TraceDqr::BTYPE_EXT_INTERRUPT:
 					enterISR[currentCore] = TraceDqr::isInterrupt;
+					break;
+				default:
+					break;
 				}
 
 				readNewTraceMessage = true;

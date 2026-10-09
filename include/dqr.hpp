@@ -30,6 +30,14 @@ typedef enum
 	TS_RELATIVE_XOR = 2		// Sync messages carry absolute value, others ts = last ^ TSTAMP
 } TySifiveTsProcessing;
 
+typedef enum
+{
+	// How the B-TYPE field of indirect branch messages is interpreted. After parsing,
+	// TraceDqr::BType always holds the N-Trace meaning, whichever encoding was used.
+	BTYPE_ENC_NTRACE = 0,	// RISC-V N-Trace spec: 1 = exception or interrupt, 2 = exception, 3 = interrupt
+	BTYPE_ENC_SIFIVE = 1	// SiFive Insight: 1 = exception, 2 = interrupt (hardware)
+} TySifiveBTypeEncoding;
+
 class CTF {
 public:
 	struct trace_packet_header {
@@ -825,7 +833,7 @@ private:
 
 class Trace {
 public:
-    Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq = 0, TySifiveTsProcessing timestamp_procesing_mechanism = TS_RELATIVE_ADD);
+    Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq = 0, TySifiveTsProcessing timestamp_procesing_mechanism = TS_RELATIVE_ADD, TySifiveBTypeEncoding btype_encoding = BTYPE_ENC_NTRACE);
     Trace(char *mf_ame);
     ~Trace();
     void cleanUp();
@@ -945,6 +953,7 @@ private:
 	TraceDqr::TIMESTAMP lastCycle[DQR_MAXCORES];
 	int               eCycleCount[DQR_MAXCORES];
 	TySifiveTsProcessing m_timestamp_procesing_mechanism = TySifiveTsProcessing::TS_RELATIVE_ADD;
+	TySifiveBTypeEncoding m_btype_encoding = TySifiveBTypeEncoding::BTYPE_ENC_NTRACE;
 
 	TraceDqr::DQErr configure(class TraceSettings &settings);
 

@@ -222,7 +222,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 			}
 		}
 		else {
-			trace = new (std::nothrow) Trace(tf_name,ef_name,numAddrBits,addrDispFlags,srcbits,od_name,freq,m_timestamp_procesing_mechanism);
+			trace = new (std::nothrow) Trace(tf_name,ef_name,numAddrBits,addrDispFlags,srcbits,od_name,freq,m_timestamp_procesing_mechanism,m_btype_encoding);
 
 			if (trace == nullptr) {
 				printf("Error: Could not create Trace object\n");
@@ -546,12 +546,15 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Decode(char* out_file)
 							format = ",%s";
 						}
 
-						if (instInfo->CRFlag & TraceDqr::isInterrupt) {
+						if ((instInfo->CRFlag & TraceDqr::isInterrupt) && (instInfo->CRFlag & TraceDqr::isException)) {
+							fprintf(fp, format,"Exception or Interrupt");
+							format = ",%s";
+						}
+						else if (instInfo->CRFlag & TraceDqr::isInterrupt) {
 							fprintf(fp, format,"Interrupt");
 							format = ",%s";
 						}
-
-						if (instInfo->CRFlag & TraceDqr::isException) {
+						else if (instInfo->CRFlag & TraceDqr::isException) {
 							fprintf(fp, format,"Exception");
 							format = ",%s";
 						}
@@ -729,7 +732,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
     if ((tf_name != nullptr) || (ef_name != nullptr) || (traceType == TraceDqr::TRACETYPE_BTM) || (traceType == TraceDqr::TRACETYPE_HTM))
     {
         TraceDqr::DQErr rc;
-        trace = new (std::nothrow) Trace(tf_name, ef_name, numAddrBits, addrDispFlags, srcbits, od_name, freq, m_timestamp_procesing_mechanism);
+        trace = new (std::nothrow) Trace(tf_name, ef_name, numAddrBits, addrDispFlags, srcbits, od_name, freq, m_timestamp_procesing_mechanism, m_btype_encoding);
         if (trace == nullptr) {
             printf("Error: Could not create Trace object\n");
             CleanUp();
@@ -1018,8 +1021,10 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
                 if (instInfo->CRFlag & TraceDqr::isCall)            { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sCall", sep);            sep = ","; }
                 if (instInfo->CRFlag & TraceDqr::isReturn)          { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sReturn", sep);         sep = ","; }
                 if (instInfo->CRFlag & TraceDqr::isSwap)            { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sSwap", sep);           sep = ","; }
-                if (instInfo->CRFlag & TraceDqr::isInterrupt)       { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sInterrupt", sep);      sep = ","; }
-                if (instInfo->CRFlag & TraceDqr::isException)       { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sException", sep);      sep = ","; }
+                const int trapFlags = instInfo->CRFlag & (TraceDqr::isInterrupt | TraceDqr::isException);
+                if (trapFlags == (TraceDqr::isInterrupt | TraceDqr::isException)) { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sException or Interrupt", sep); sep = ","; }
+                else if (trapFlags == TraceDqr::isInterrupt)  { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sInterrupt", sep);      sep = ","; }
+                else if (trapFlags == TraceDqr::isException)  { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sException", sep);      sep = ","; }
                 if (instInfo->CRFlag & TraceDqr::isExceptionReturn) { pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "%sException Return", sep); }
                 pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "]");
             }
@@ -1257,6 +1262,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::Configure(const TDecoderConfig&
 	itcPrintOpts = config.itc_print_options;
 	itcPrintChannel = config.itc_print_channel;
 	m_timestamp_procesing_mechanism = config.timestamp_procesing_mechanism;
+	m_btype_encoding = config.btype_encoding;
 
 	return SIFIVE_TRACE_DECODER_OK;
 }

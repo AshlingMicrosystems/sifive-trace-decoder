@@ -17,7 +17,7 @@ static void usage(char *name)
 	printf("           [-sf settingsfile] [-srcbits=n] [-src] [-nosrc] [-file] [-nofile] [-func] [-nofunc] [-dasm] [-nodasm]\n");
 	printf("           [-trace] [-notrace] [-pathunix] [-pathwindows] [-pathraw] [--strip=path] [-itcprint | -itcprint=n] [-noitcprint]\n");
 	printf("           [-addrsize=n] [-addrsize=n+] [-32] [-64] [-32+] [-archsize=nn] [-addrsep] [-noaddrsep] [-analytics | -analyitcs=n]\n");
-	printf("           [-noanalytics] [-freq nn] [-tssize=n] [-callreturn] [-nocallreturn] [-branches] [-nobranches] [-msglevel=n]\n");
+	printf("           [-noanalytics] [-freq nn] [-tssize=n] [-btype=ntrace|sifive] [-callreturn] [-nocallreturn] [-branches] [-nobranches] [-msglevel=n]\n");
 	printf("           [-cutpath=<base path>] [-s file] [-r addr] [-debug] [-nodebug] [-v] [-h]\n");
 	printf("\n");
 	printf("-t tracefile: Specify the name of the Nexus trace message file. Must contain the file extension (such as .rtd).\n");
@@ -91,6 +91,8 @@ static void usage(char *name)
 	printf("-freq nn:     Specify the frequency in Hz for the timestamp tics clock. If specified, time instead\n");
 	printf("              of tics will be displayed.\n");
 	printf("-tssize=n:    Specify size in bits of timestamp counter; used for timestamp wrap\n");
+	printf("-btype=enc:   Encoding of the B-TYPE field in indirect branch messages. ntrace (default): RISC-V N-Trace,\n");
+	printf("              1 = exception or interrupt, 2 = exception, 3 = interrupt. sifive: 1 = exception, 2 = interrupt\n");
 	printf("-callreturn:  Annotate calls, returns, and exceptions\n");
 	printf("-nocallreturn Do not annotate calls, returns, exceptions (default)\n");
 	printf("-branches:    Annotate conditional branches with taken or not taken information\n");
@@ -171,6 +173,7 @@ int main(int argc, char *argv[])
 	bool trace_flag = false;
 	bool func_flag = false;
 	int tssize = 40;
+	TySifiveBTypeEncoding btypeEncoding = BTYPE_ENC_NTRACE;
 	uint32_t freq = 0;
 	char *strip_flag = nullptr;
 	int  numAddrBits = 0;
@@ -455,6 +458,12 @@ int main(int argc, char *argv[])
 				printf("Error: tssize must be > 0, <= 64");
 				return 1;
 			}
+		}
+		else if (strcmp("-btype=ntrace",argv[i]) == 0) {
+			btypeEncoding = BTYPE_ENC_NTRACE;
+		}
+		else if (strcmp("-btype=sifive",argv[i]) == 0) {
+			btypeEncoding = BTYPE_ENC_SIFIVE;
 		}
 		else if (strcmp("-callreturn",argv[i]) == 0 ) {
 			showCallsReturns = true;
@@ -744,7 +753,7 @@ int main(int argc, char *argv[])
 			}
 		}
 		else {
-			trace = new (std::nothrow) Trace(tf_name,ef_name,numAddrBits,addrDispFlags,srcbits,od_name,freq);
+			trace = new (std::nothrow) Trace(tf_name,ef_name,numAddrBits,addrDispFlags,srcbits,od_name,freq,TS_RELATIVE_ADD,btypeEncoding);
 
 			if (trace == nullptr) {
 				printf("Error: Could not create Trace object\n");
@@ -1061,12 +1070,15 @@ int main(int argc, char *argv[])
 							format = ",%s";
 						}
 
-						if (instInfo->CRFlag & TraceDqr::isInterrupt) {
+						if ((instInfo->CRFlag & TraceDqr::isInterrupt) && (instInfo->CRFlag & TraceDqr::isException)) {
+							printf(format,"Exception or Interrupt");
+							format = ",%s";
+						}
+						else if (instInfo->CRFlag & TraceDqr::isInterrupt) {
 							printf(format,"Interrupt");
 							format = ",%s";
 						}
-
-						if (instInfo->CRFlag & TraceDqr::isException) {
+						else if (instInfo->CRFlag & TraceDqr::isException) {
 							printf(format,"Exception");
 							format = ",%s";
 						}
