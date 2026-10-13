@@ -1040,8 +1040,8 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
             msgInfo->messageToText(dst, sizeof dst, msgLevel);
 
             const TraceDqr::BType bt = msgInfo->getB_Type();
-            const bool is_excep_or_intr   = ((bt == TraceDqr::BTYPE_EXT_EXCEPTION) || 
-											(bt == TraceDqr::BTYPE_EXT_INTERRUPT));
+            const bool is_excep_or_intr   = ((bt == TraceDqr::BTYPE_EXCEPTION) || 
+											(bt == TraceDqr::BTYPE_INTERRUPT));
             const bool is_trap0 = (strstr(dst, "TCode: TRAP INFO") != nullptr) &&
                                   (strstr(dst, "Trap Value: 0")   != nullptr);
 

@@ -7757,10 +7757,10 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
 				bt = "Exception or Interrupt";
 				break;
-			case TraceDqr::BTYPE_EXT_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_EXT_INTERRUPT:
+			case TraceDqr::BTYPE_INTERRUPT:
 				bt = "Interrupt";
 				break;				
 			case TraceDqr::BTYPE_UNDEFINED:
@@ -7940,10 +7940,10 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
 				bt = "Exception or Interrupt";
 				break;
-			case TraceDqr::BTYPE_EXT_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_EXT_INTERRUPT:
+			case TraceDqr::BTYPE_INTERRUPT:
 				bt = "Interrupt";
 				break;					
 			case TraceDqr::BTYPE_UNDEFINED:
@@ -8056,10 +8056,10 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
 				bt = "Exception or Interrupt";
 				break;
-			case TraceDqr::BTYPE_EXT_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_EXT_INTERRUPT:
+			case TraceDqr::BTYPE_INTERRUPT:
 				bt = "Interrupt";
 				break;					
 			case TraceDqr::BTYPE_UNDEFINED:
@@ -8126,10 +8126,10 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
 				bt = "Exception or Interrupt";
 				break;
-			case TraceDqr::BTYPE_EXT_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_EXT_INTERRUPT:
+			case TraceDqr::BTYPE_INTERRUPT:
 				bt = "Interrupt";
 				break;					
 			case TraceDqr::BTYPE_UNDEFINED:
@@ -10987,9 +10987,9 @@ TraceDqr::BType SliceFileParser::toBType(uint64_t rawBType)
 	case 0:
 		return TraceDqr::BTYPE_INDIRECT;
 	case 1:
-		return TraceDqr::BTYPE_EXT_EXCEPTION;
+		return TraceDqr::BTYPE_EXCEPTION;
 	case 2:
-		return TraceDqr::BTYPE_EXT_INTERRUPT;	// SiFive "Hardware"
+		return TraceDqr::BTYPE_INTERRUPT;	// SiFive "Hardware"
 	default:
 		return TraceDqr::BTYPE_UNDEFINED;
 	}

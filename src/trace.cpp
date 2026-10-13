@@ -8464,10 +8464,10 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					// Encoder does not say which, so flag both
 					enterISR[currentCore] = TraceDqr::isException | TraceDqr::isInterrupt;
 					break;
-				case TraceDqr::BTYPE_EXT_EXCEPTION:
+				case TraceDqr::BTYPE_EXCEPTION:
 					enterISR[currentCore] = TraceDqr::isException;
 					break;
-				case TraceDqr::BTYPE_EXT_INTERRUPT:
+				case TraceDqr::BTYPE_INTERRUPT:
 					enterISR[currentCore] = TraceDqr::isInterrupt;
 					break;
 				default:
