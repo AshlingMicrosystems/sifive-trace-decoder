@@ -829,6 +829,9 @@ private:
 	%ignore Trace::analyticsToText(char *dst,int dst_len,int detailLevel);
 	%ignore Trace::getITCPrintStr(int core,bool &haveData,TraceDqr::TIMESTAMP &startTime,TraceDqr::TIMESTAMP &endtime);
 	%ignore Trace::flushITCPrintStr(int core,bool &haveData,TraceDqr::TIMESTAMP &startTime,TraceDqr::TIMESTAMP &endtime);
+	%ignore Trace::haveFirstSync();
+	%ignore Trace::isSynced(int core);
+	%ignore Trace::getResyncEvent(int &core,uint32_t &offset,const char *&reason);
 #endif // SWIG
 
 class Trace {
@@ -887,6 +890,12 @@ public:
 	TraceDqr::DQErr PushTraceData(uint8_t *p_buff, const uint64_t size);
 	void SetEndOfData();
 	void SetFilePoiter(FILE* fp);
+
+	// Sync status, used by the decoder interface to hold back output until the first sync and to
+	// mark where decoding was abandoned after an error (getResyncEvent() returns each one once)
+	bool haveFirstSync() { return firstSyncFound; }
+	bool isSynced(int core);
+	bool getResyncEvent(int &core,uint32_t &offset,const char *&reason);
 private:
 	enum state {
 		TRACE_STATE_SYNCCATE,
@@ -921,6 +930,11 @@ private:
 	class Count           *counts;
 	enum state       state[DQR_MAXCORES];
 	bool             readNewTraceMessage;
+	bool             firstSyncFound;
+	bool             resyncPending;
+	int              resyncCore;
+	uint32_t         resyncOffset;
+	const char      *resyncReason;
 	int              currentCore;
 	int              srcbits;
 	bool             bufferItc;
@@ -966,6 +980,8 @@ private:
 
 	TraceDqr::ADDRESS computeAddress();
 	TraceDqr::DQErr processTraceMessage(NexusMessage &nm,TraceDqr::ADDRESS &pc,TraceDqr::ADDRESS &faddr,TraceDqr::TIMESTAMP &ts,bool &consumed);
+	void recordResync(const char *reason);
+	TraceDqr::DQErr resyncAfterError(const char *reason);
 };
 
 class SRec {

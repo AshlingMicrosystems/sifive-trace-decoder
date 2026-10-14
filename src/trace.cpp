@@ -5203,6 +5203,12 @@ TraceDqr::DQErr Trace::configure(TraceSettings &settings)
 	syncCount = 0;
 	caSyncAddr = (TraceDqr::ADDRESS)-1;
 
+	firstSyncFound = false;
+	resyncPending = false;
+	resyncCore = 0;
+	resyncOffset = 0;
+	resyncReason = nullptr;
+
 	if (settings.odName != nullptr) {
 		int len;
 
@@ -5830,6 +5836,78 @@ int Trace::getITCFlushMask()
 	}
 
 	return itcPrint->getITCFlushMask();
+}
+
+// true while the core is decoding instructions, i.e. it has a sync and is not waiting for one
+
+bool Trace::isSynced(int core)
+{
+	if ((core < 0) || ((size_t)core >= sizeof state / sizeof state[0])) {
+		return false;
+	}
+
+	switch (state[core]) {
+	case TRACE_STATE_GETMSGWITHCOUNT:
+	case TRACE_STATE_RETIREMESSAGE:
+	case TRACE_STATE_GETNEXTMSG:
+	case TRACE_STATE_GETNEXTINSTRUCTION:
+		return true;
+	default:
+		return false;
+	}
+}
+
+bool Trace::getResyncEvent(int &core,uint32_t &offset,const char *&reason)
+{
+	if (resyncPending == false) {
+		return false;
+	}
+
+	core = resyncCore;
+	offset = resyncOffset;
+	reason = resyncReason;
+
+	resyncPending = false;
+
+	return true;
+}
+
+// Note that decoding of the current core is being abandoned at the current trace message. Only
+// recorded if the core was decoding; nothing is lost by an error while waiting for a sync. If
+// there are several before getResyncEvent() is called, the first one is kept.
+
+void Trace::recordResync(const char *reason)
+{
+	if ((resyncPending == false) && isSynced(currentCore)) {
+		resyncPending = true;
+		resyncCore = currentCore;
+		resyncOffset = nm.offset;
+		resyncReason = reason;
+	}
+}
+
+// Recover from an error in the current trace message instead of ending the decode: drop the
+// message, forget the core's address, time and counts, and wait for the next sync
+
+TraceDqr::DQErr Trace::resyncAfterError(const char *reason)
+{
+	recordResync(reason);
+
+	lastTime[currentCore] = 0;
+	currentAddress[currentCore] = 0;
+	lastFaddr[currentCore] = 0;
+	enterISR[currentCore] = TraceDqr::isNone;
+
+	if (counts != nullptr) {
+		counts->resetStack(currentCore);
+		counts->resetCounts(currentCore);
+	}
+
+	state[currentCore] = TRACE_STATE_GETFIRSTSYNCMSG;
+	readNewTraceMessage = true;
+
+	status = TraceDqr::DQERR_OK;
+	return status;
 }
 
 TraceDqr::ADDRESS Trace::computeAddress()
@@ -7553,11 +7631,15 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				}
 
 				if (haveMsg == false) {
-					if(globalDebugFlag)
+					// Not before the first sync: there this is usually the leftover end of a message cut off at
+					// the start of the trace data, and its fields are not valid
+					if(globalDebugFlag && firstSyncFound)
 					{
 						if(m_fp)
 							fprintf(m_fp, "\nTrace: %s\n", nm.messageToString(3).c_str());
 					}
+					recordResync("corrupt trace message");
+
 					lastTime[currentCore] = 0;
 					currentAddress[currentCore] = 0;
 	                lastFaddr[currentCore] = 0;
@@ -7573,6 +7655,11 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			// if set see if HTM trace message, switch to HTM mode
 
 			if (traceType != TraceDqr::TRACETYPE_HTM) {
+				// Before the first sync this may be a misread fragment of a message cut off at the start
+				// of the trace data, so only a message that is itself a sync can switch the trace type
+
+				bool htmSwitchAllowed = firstSyncFound || (nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY_WS);
+
 				switch (nm.tcode) {
 				case TraceDqr::TCODE_OWNERSHIP_TRACE:
 				case TraceDqr::TCODE_DIRECT_BRANCH:
@@ -7589,7 +7676,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				case TraceDqr::TCODE_TRAP_INFO:
 					break;
 				case TraceDqr::TCODE_CORRELATION:
-					if (nm.correlation.cdf == 1) {
+					if ((nm.correlation.cdf == 1) && htmSwitchAllowed) {
 						traceType = TraceDqr::TRACETYPE_HTM;
 						if (globalDebugFlag) printf("TCODE_CORRELATION, cdf == 1: switching to HTM mode\n");
 					}
@@ -7597,8 +7684,10 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				case TraceDqr::TCODE_RESOURCEFULL:
 				case TraceDqr::TCODE_INDIRECTBRANCHHISTORY:
 				case TraceDqr::TCODE_INDIRECTBRANCHHISTORY_WS:
-					traceType = TraceDqr::TRACETYPE_HTM;
-					if (globalDebugFlag) printf("History/taken/not taken count TCODE: switching to HTM mode\n");
+					if (htmSwitchAllowed) {
+						traceType = TraceDqr::TRACETYPE_HTM;
+						if (globalDebugFlag) printf("History/taken/not taken count TCODE: switching to HTM mode\n");
+					}
 					break;
 				case TraceDqr::TCODE_REPEATINSTRUCTION:
 				case TraceDqr::TCODE_REPEATINSTRUCTION_WS:
@@ -7617,16 +7706,12 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				case TraceDqr::TCODE_DEBUG_STATUS:
 				case TraceDqr::TCODE_DEVICE_ID:
 					printf("Error: NextInstruction(): Unsupported tcode type (%d)\n",nm.tcode);
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
 
-					return status;
+					return resyncAfterError("unsupported trace message");
 				case TraceDqr::TCODE_UNDEFINED:
 					printf("Error: NextInstruction(): Undefined tcode type (%d)\n",nm.tcode);
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
 
-					return status;
+					return resyncAfterError("unsupported trace message");
 				}
 			}
 
@@ -8007,6 +8092,9 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			// only exit this state when sync type message is found or EOF or error
 			// Event messages will cause state to change to TRACE_STATE_EVENT
 
+			// An error here (e.g. from a misread fragment of a message cut off at the start of the trace
+			// data) drops the message and keeps waiting for a sync; nothing has been decoded yet to lose
+
 			switch (nm.tcode) {
 			case TraceDqr::TCODE_SYNC:
 			case TraceDqr::TCODE_DIRECT_BRANCH_WS:
@@ -8016,10 +8104,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_GETFIRSTSYNCMSG: processTraceMessage()\n");
 
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					return status;
+					return resyncAfterError("trace message could not be processed");
 				}
 
 				if (srcInfo != nullptr) {
@@ -8035,6 +8120,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				}
 
 				state[currentCore] = TRACE_STATE_GETMSGWITHCOUNT;
+				firstSyncFound = true;
 				break;
 			case TraceDqr::TCODE_INCIRCUITTRACE_WS:
 				// this may set the timestamp, and and may set the address
@@ -8044,10 +8130,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_GETFIRSTSYNCMSG: processTraceMessage()\n");
 
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					return status;
+					return resyncAfterError("trace message could not be processed");
 				}
 
 				if (currentAddress[currentCore] == 0) {
@@ -8092,6 +8175,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 						}
 					}
 					state[currentCore] = TRACE_STATE_GETMSGWITHCOUNT;
+					firstSyncFound = true;
 				}
 				break;
 			case TraceDqr::TCODE_DATA_ACQUISITION:
@@ -8099,14 +8183,12 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_GETFIRSTSYNCMSG: processTraceMessage()\n");
 
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					return status;
+					return resyncAfterError("trace message could not be processed");
 				}
 				break;
 			case TraceDqr::TCODE_INCIRCUITTRACE:
 			case TraceDqr::TCODE_OWNERSHIP_TRACE:
+			case TraceDqr::TCODE_AUXACCESS_WRITE:
 			case TraceDqr::TCODE_DIRECT_BRANCH:
 			case TraceDqr::TCODE_INDIRECT_BRANCH:
 			case TraceDqr::TCODE_INDIRECTBRANCHHISTORY:
@@ -8122,10 +8204,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_GETFIRSTSYNCMSG: processTraceMessage()\n");
 
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					return status;
+					return resyncAfterError("trace message could not be processed");
 				}
 				break;
 			case TraceDqr::TCODE_ERROR:
@@ -8143,10 +8222,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			default:
 				printf("Error: nextInstructin(): state TRACE_STATE_GETFIRSTSYNCMSG: unsupported or invalid TCODE\n");
 
-				state[currentCore] = TRACE_STATE_ERROR;
-				status = TraceDqr::DQERR_ERR;
-
-				return status;
+				return resyncAfterError("unsupported trace message");
 			}
 
 			// INCIRCUITTRACE or INCIRCUITTRACE_WS will have set state to TRACE_STATE_EVENT
@@ -8201,10 +8277,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 				rc = counts->setCounts(&nm);
 				if (rc != TraceDqr::DQERR_OK) {
-					state[currentCore] = TRACE_STATE_ERROR;
-					status = rc;
-
-					return status;
+					return resyncAfterError("instruction counts could not be applied");
 				}
 
 				// only these TCODEs have counts and release from this state
@@ -8219,10 +8292,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_GETMSGWITHCOUNT: processTraceMessage()\n");
 
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					return status;
+					return resyncAfterError("trace message could not be processed");
 				}
 
 				if ((nm.getCKSRC() == TraceDqr::ICT_CONTROL) && (nm.getCKDF() == 0)) {
@@ -8312,10 +8382,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_GETMSGWITHCOUNT: processTraceMessage()\n");
 
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					return status;
+					return resyncAfterError("trace message could not be processed");
 				}
 
 				// for now, return message;
@@ -8362,10 +8429,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			default:
 				printf("Error: bad tcode type in state TRACE_STATE_GETMSGWITHCOUNT. TCODE (%d)\n",nm.tcode);
 
-				state[currentCore] = TRACE_STATE_ERROR;
-				status = TraceDqr::DQERR_ERR;
-
-				return status;
+				return resyncAfterError("unexpected trace message");
 			}
 			break;
 		case TRACE_STATE_RETIREMESSAGE:
@@ -8395,10 +8459,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_RETIREMESSAGE: processTraceMessage()\n");
 
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					return status;
+					return resyncAfterError("trace message could not be processed");
 				}
 
 				if (msgInfo != nullptr) {
@@ -8483,10 +8544,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_RETIREMESSAGE: processTraceMessage()\n");
 
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					return status;
+					return resyncAfterError("trace message could not be processed");
 				}
 
 				readNewTraceMessage = true;
@@ -8496,10 +8554,8 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				// these messages should have been retired immediately
 
 				printf("Error: unexpected tcode of INCIRCUTTRACE or INCIRCUTTRACE_WS in state TRACE_STATE_RETIREMESSAGE\n");
-				state[currentCore] = TRACE_STATE_ERROR;
 
-				status = TraceDqr::DQERR_ERR;
-				return status;
+				return resyncAfterError("unexpected trace message");
 			case TraceDqr::TCODE_CORRELATION:
 				// correlation has i_cnt, but no address info
 
@@ -8529,26 +8585,17 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			case TraceDqr::TCODE_ERROR:
 				printf("Error: Unexpected tcode TCODE_ERROR in state TRACE_STATE_RETIREMESSAGE\n");
 
-				state[currentCore] = TRACE_STATE_ERROR;
-				status = TraceDqr::DQERR_ERR;
-
-				return status;
+				return resyncAfterError("unexpected trace message");
 			case TraceDqr::TCODE_AUXACCESS_WRITE:
 			case TraceDqr::TCODE_OWNERSHIP_TRACE:
 				// these messages have no address or i-cnt info and should have been
 				// instantly retired when they were read.
 
-				state[currentCore] = TRACE_STATE_ERROR;
-				status = TraceDqr::DQERR_ERR;
-
-				return status;
+				return resyncAfterError("unexpected trace message");
 			default:
 				printf("Error: bad tcode type in state TRACE_STATE_RETIREMESSAGE\n");
 
-				state[currentCore] = TRACE_STATE_ERROR;
-				status = TraceDqr::DQERR_ERR;
-
-				return status;
+				return resyncAfterError("unexpected trace message");
 			}
 
 			status = TraceDqr::DQERR_OK;
@@ -8572,11 +8619,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: nextInstruction: state TRACE_STATE_GETNEXTMESSAGE Count::seteCounts()\n");
 
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					status = rc;
-
-					return status;
+					return resyncAfterError("instruction counts could not be applied");
 				}
 
 				state[currentCore] = TRACE_STATE_GETNEXTINSTRUCTION;
@@ -8589,10 +8632,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_GETMSGWITHCOUNT: processTraceMessage()\n");
 
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					return status;
+					return resyncAfterError("trace message could not be processed");
 				}
 
 				if ((nm.getCKSRC() == TraceDqr::ICT_CONTROL) && (nm.getCKDF() == 0)) {
@@ -8677,10 +8717,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if (rc != TraceDqr::DQERR_OK) {
 					printf("Error: NextInstruction(): state TRACE_STATE_GETNXTMSG: processTraceMessage()\n");
 
-					status = TraceDqr::DQERR_ERR;
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					return status;
+					return resyncAfterError("trace message could not be processed");
 				}
 
 				// for now, return message;
@@ -8721,10 +8758,9 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 				return status;
 			default:
-				state[currentCore] = TRACE_STATE_ERROR;
-				status = TraceDqr::DQERR_ERR;
+				printf("Error: bad tcode type in state TRACE_STATE_GETNEXTMSG. TCODE (%d)\n",nm.tcode);
 
-				return status;
+				return resyncAfterError("unexpected trace message");
 			}
 			break;
 		case TRACE_STATE_GETNEXTINSTRUCTION:
@@ -8761,6 +8797,8 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			if (status != TraceDqr::DQERR_OK) {
 				printf("Error: getInstructionByAddress failed - looking for next sync message\n");
 
+				recordResync("traced address is not in the program");
+
 				lastTime[currentCore] = 0;
 				currentAddress[currentCore] = 0;
                 lastFaddr[currentCore] = 0;
@@ -8785,10 +8823,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			if (rc != 0) {
 				printf("Error: Cann't decode size of instruction %04x\n",inst);
 
-				state[currentCore] = TRACE_STATE_ERROR;
-				status = TraceDqr::DQERR_ERR;
-
-				return status;
+				return resyncAfterError("instruction could not be decoded");
 			}
 
 			Disassemble(addr);
@@ -8809,9 +8844,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			if (status != TraceDqr::DQERR_OK) {
 				printf("Error: nextAddr() failed\n");
 
-				state[currentCore] = TRACE_STATE_ERROR;
-
-				return status;
+				return resyncAfterError("next instruction address could not be computed");
 			}
 
 			// if addr == -1 and brFlags == BRFLAG_unknown, we need to read another trace message
@@ -8841,10 +8874,6 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					instructionInfo.instructionToText(d,sizeof d,2);
 					printf("%08llx:    %s\n",currentAddress[currentCore],d);
 
-					state[currentCore] = TRACE_STATE_ERROR;
-
-					status = TraceDqr::DQERR_ERR;
-
 //					nm.dumpRawMessage();
 //					nm.dump();
 //
@@ -8857,7 +8886,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 //						nm.dump();
 //					}
 
-					return status;
+					return resyncAfterError("next instruction address could not be computed");
 				}
 			}
 

@@ -862,17 +862,106 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
         la_seen_traces = 0;
     };
 
+    // ---- Page window ----
+    // The buffer holds the previous, current and next page. Only what starts inside
+    // [m_trace_start_idx, m_trace_stop_idx] (the current page) is written out: the previous page gives
+    // the decoder a sync to start from, and the next page completes a message that starts on the
+    // current page but ends after it.
+    const bool window_empty    = (m_trace_stop_idx < m_trace_start_idx);
+    bool       have_msg_offset = false;   // a message has been read
+    uint64_t   last_msg_offset = 0;       // offset of the most recently read message
+    bool       window_entered  = false;   // a message starting on or after the current page has been read
+    bool       stopped_early   = false;   // stopped at the first message after the current page
+
+    // Gap left by a decoder error before the current page; marked at the top of the page if the core
+    // still has no sync when the page starts
+    bool        pending_gap        = false;
+    int         pending_gap_core   = 0;
+    const char* pending_gap_reason = nullptr;
+
+    // Marks a gap in the decoded output. The UI matches on the "Decode error: " prefix.
+    auto add_decode_error = [&](const std::string& text) {
+        (la_active ? la_block : out_lines).emplace_back("Decode error: " + text);
+        firstPrint = false;
+    };
+
+    auto mark_gap_in_page = [&](uint64_t gap_offset, const char* gap_reason) {
+        char text[256];
+        snprintf(text, sizeof(text), "%s at byte %llu of this page; instructions are missing until the next sync",
+                 gap_reason, (unsigned long long)(gap_offset - m_trace_start_idx));
+        add_decode_error(text);
+    };
+
     // ---- Main loop ----
     TraceDqr::DQErr ec;
     do {
         instInfo = nullptr; msgInfo = nullptr; srcInfo = nullptr; nm = nullptr;
 
         ec = trace->NextInstruction(&instInfo, &msgInfo, &srcInfo, &nm);
+
+        // nm is set when a message is read, even if processing it then fails
+        if (nm != nullptr) {
+            have_msg_offset = true;
+            last_msg_offset = nm->offset;
+        }
+
         if (ec != TraceDqr::DQERR_OK) break;
 
         // Update sticky instruction window when a new nm arrives
         if (nm != nullptr) {
             instr_window_on = (nm->offset >= m_trace_start_idx) && (nm->offset <= m_trace_stop_idx);
+
+            // Nothing that starts after the current page is written out, so this is the last message
+            // needed: finish this iteration and stop
+            if (nm->offset > m_trace_stop_idx) {
+                stopped_early = true;
+            }
+        }
+
+        // ---------- GAPS LEFT BY DECODER ERRORS ----------
+        // The decoder recovers from an error by waiting for the next sync, so the instructions in
+        // between are missing. Mark that where it affects the current page.
+        int         gap_core    = 0;
+        uint32_t    gap_offset  = 0;
+        const char* gap_reason  = nullptr;
+        bool        gap_in_page = false;
+
+        if (trace->getResyncEvent(gap_core, gap_offset, gap_reason)) {
+            if (gap_offset < m_trace_start_idx) {
+                if (!trace->isSynced(gap_core)) {
+                    pending_gap        = true;
+                    pending_gap_core   = gap_core;
+                    pending_gap_reason = gap_reason;
+                }
+            }
+            else if (gap_offset <= m_trace_stop_idx) {
+                gap_in_page = true;
+            }
+        }
+
+        if (pending_gap && trace->isSynced(pending_gap_core)) {
+            pending_gap = false;   // found a sync again before the page started
+        }
+
+        if ((nm != nullptr) && !window_entered && (nm->offset >= m_trace_start_idx)) {
+            window_entered = true;
+
+            if (pending_gap && instr_window_on) {
+                char text[256];
+                snprintf(text, sizeof(text), "%s before this page; instructions are missing from the start of this page until the next sync",
+                         pending_gap_reason);
+                add_decode_error(text);
+            }
+            pending_gap = false;
+        }
+
+        // The gap usually comes before this call's output, because the message it was in has been
+        // dropped. The exception is an error retiring a message after its last instruction was
+        // returned: that instruction is good and comes before the gap.
+        const bool gap_after_output = (instInfo != nullptr) && ((nm == nullptr) || (gap_offset >= nm->offset));
+        if (gap_in_page && !gap_after_output) {
+            mark_gap_in_page(gap_offset, gap_reason);
+            gap_in_page = false;
         }
 
         // Raw Trace "offset" gate
@@ -1035,7 +1124,9 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
         }
 
         // ---------- RAW TRACE MESSAGES ----------
-        if ((trace != nullptr) && trace_flag && (msgInfo != nullptr) && msg_in_range)
+        // Not before the first sync: when the trace data starts part-way through a message, the
+        // leftover bytes are read as a message of garbage
+        if ((trace != nullptr) && trace_flag && (msgInfo != nullptr) && msg_in_range && trace->haveFirstSync())
         {
             msgInfo->messageToText(dst, sizeof dst, msgLevel);
 
@@ -1084,6 +1175,8 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
         }
 
         // ---------- ITC PRINTS (buffered; will flush when trace flushes or at end) ----------
+        // A print is complete when the message that finishes it is processed, so it is written out
+        // only if that message (the latest one read) is on the current page
         if ((trace != nullptr) && (itcPrintOpts != TraceDqr::ITC_OPT_NONE))
         {
             std::string s; bool haveStr = false;
@@ -1093,6 +1186,11 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
                 if (core_mask & 1) {
                     s = trace->getITCPrintStr(core, haveStr, startTime, endTime);
                     while (haveStr) {
+                        if (!instr_window_on) {
+                            s = trace->getITCPrintStr(core, haveStr, startTime, endTime);
+                            continue;
+                        }
+
                         char line[4096]; size_t p = 0;
                         if (!firstPrint) { (la_active ? la_block : out_lines).emplace_back(); }
                         if (srcbits > 0) p += (size_t)snprintf(line + p, sizeof(line) - p, "[%d] ", core);
@@ -1115,23 +1213,55 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
             }
         }
 
-    } while (ec == TraceDqr::DQERR_OK);
+        if (gap_in_page) {
+            mark_gap_in_page(gap_offset, gap_reason);
+        }
 
-    if (ec != TraceDqr::DQERR_EOF) {
+    } while ((ec == TraceDqr::DQERR_OK) && !stopped_early);
+
+    // A gap recorded by the call that ended the decode (e.g. a corrupt last message)
+    {
+        int         gap_core   = 0;
+        uint32_t    gap_offset = 0;
+        const char* gap_reason = nullptr;
+
+        if (trace->getResyncEvent(gap_core, gap_offset, gap_reason) &&
+            (gap_offset >= m_trace_start_idx) && (gap_offset <= m_trace_stop_idx)) {
+            mark_gap_in_page(gap_offset, gap_reason);
+        }
+    }
+
+    if (!stopped_early && (ec != TraceDqr::DQERR_EOF)) {
         printf("Error (%d) terminated trace decode\n", ec);
         // If look-ahead was active, just emit what we have and flush
-        if (la_active && !la_block.empty()) {
+        if (la_active) {
             for (auto& s : la_block) out_lines.emplace_back(std::move(s));
             la_block.clear();
             la_active = false;
         }
+
+        // Mark the error, unless the current page was already complete or has no data
+        const bool page_affected = !window_empty && (!have_msg_offset || (last_msg_offset <= m_trace_stop_idx));
+        if (page_affected) {
+            if (!have_msg_offset || (last_msg_offset < m_trace_start_idx)) {
+                add_decode_error("this page could not be decoded (decoder error before this page)");
+            }
+            else {
+                char text[256];
+                snprintf(text, sizeof(text), "decoding stopped at byte %llu of this page (decoder error); the rest of this page is not decoded",
+                         (unsigned long long)(last_msg_offset - m_trace_start_idx));
+                add_decode_error(text);
+            }
+        }
+
         flush_buffer();
         CleanUp();
-        return SIFIVE_TRACE_DECODER_ERR;
+        return page_affected ? SIFIVE_TRACE_DECODER_ERR : SIFIVE_TRACE_DECODER_OK;
     }
 
     // ---------- ITC PRINTS (flush-after-EOF) ----------
-    if ((trace != nullptr) && (itcPrintOpts != TraceDqr::ITC_OPT_NONE))
+    // Not when stopped early: an unfinished print carries on into the next page and is written out there
+    if ((trace != nullptr) && (itcPrintOpts != TraceDqr::ITC_OPT_NONE) && !stopped_early)
     {
         std::string s; bool haveStr = false;
         core_mask = trace->getITCFlushMask();
