@@ -24,9 +24,19 @@ extern const char * const DQR_VERSION;
 
 typedef enum
 {
-	TS_DEFAULT = 0,
-	TS_TT
+	// How the TSTAMP field of trace messages is interpreted
+	TS_RELATIVE_ADD = 0,	// RISC-V N-Trace spec: sync messages carry absolute value, others ts = last + TSTAMP
+	TS_ABSOLUTE = 1,		// Every message with a TSTAMP carries the absolute value
+	TS_RELATIVE_XOR = 2		// Sync messages carry absolute value, others ts = last ^ TSTAMP
 } TySifiveTsProcessing;
+
+typedef enum
+{
+	// How the B-TYPE field of indirect branch messages is interpreted. After parsing,
+	// TraceDqr::BType always holds the N-Trace meaning, whichever encoding was used.
+	BTYPE_ENC_NTRACE = 0,	// RISC-V N-Trace spec: 1 = exception or interrupt, 2 = exception, 3 = interrupt
+	BTYPE_ENC_SIFIVE = 1	// SiFive Insight: 1 = exception, 2 = interrupt (hardware)
+} TySifiveBTypeEncoding;
 
 class CTF {
 public:
@@ -215,8 +225,8 @@ public:
   typedef enum {
   	BTYPE_INDIRECT  = 0,
   	BTYPE_EXCEPTION_OR_INTERRUPT = 1,
-  	BTYPE_EXT_EXCEPTION  = 2,
-  	BTYPE_EXT_INTERRUPT  = 3,
+  	BTYPE_EXCEPTION  = 2,
+  	BTYPE_INTERRUPT  = 3,
 
   	BTYPE_UNDEFINED
   } BType;
@@ -819,11 +829,14 @@ private:
 	%ignore Trace::analyticsToText(char *dst,int dst_len,int detailLevel);
 	%ignore Trace::getITCPrintStr(int core,bool &haveData,TraceDqr::TIMESTAMP &startTime,TraceDqr::TIMESTAMP &endtime);
 	%ignore Trace::flushITCPrintStr(int core,bool &haveData,TraceDqr::TIMESTAMP &startTime,TraceDqr::TIMESTAMP &endtime);
+	%ignore Trace::haveFirstSync();
+	%ignore Trace::isSynced(int core);
+	%ignore Trace::getResyncEvent(int &core,uint32_t &offset,const char *&reason);
 #endif // SWIG
 
 class Trace {
 public:
-    Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq = 0, TySifiveTsProcessing timestamp_procesing_mechanism = TS_DEFAULT);
+    Trace(char *tf_name,char *ef_name,int numAddrBits,uint32_t addrDispFlags,int srcBits,const char *odExe,uint32_t freq = 0, TySifiveTsProcessing timestamp_procesing_mechanism = TS_RELATIVE_ADD, TySifiveBTypeEncoding btype_encoding = BTYPE_ENC_NTRACE);
     Trace(char *mf_ame);
     ~Trace();
     void cleanUp();
@@ -877,6 +890,12 @@ public:
 	TraceDqr::DQErr PushTraceData(uint8_t *p_buff, const uint64_t size);
 	void SetEndOfData();
 	void SetFilePoiter(FILE* fp);
+
+	// Sync status, used by the decoder interface to hold back output until the first sync and to
+	// mark where decoding was abandoned after an error (getResyncEvent() returns each one once)
+	bool haveFirstSync() { return firstSyncFound; }
+	bool isSynced(int core);
+	bool getResyncEvent(int &core,uint32_t &offset,const char *&reason);
 private:
 	enum state {
 		TRACE_STATE_SYNCCATE,
@@ -911,6 +930,11 @@ private:
 	class Count           *counts;
 	enum state       state[DQR_MAXCORES];
 	bool             readNewTraceMessage;
+	bool             firstSyncFound;
+	bool             resyncPending;
+	int              resyncCore;
+	uint32_t         resyncOffset;
+	const char      *resyncReason;
 	int              currentCore;
 	int              srcbits;
 	bool             bufferItc;
@@ -942,7 +966,8 @@ private:
 	class CATrace   *caTrace;
 	TraceDqr::TIMESTAMP lastCycle[DQR_MAXCORES];
 	int               eCycleCount[DQR_MAXCORES];
-	TySifiveTsProcessing m_timestamp_procesing_mechanism = TySifiveTsProcessing::TS_DEFAULT;
+	TySifiveTsProcessing m_timestamp_procesing_mechanism = TySifiveTsProcessing::TS_RELATIVE_ADD;
+	TySifiveBTypeEncoding m_btype_encoding = TySifiveBTypeEncoding::BTYPE_ENC_NTRACE;
 
 	TraceDqr::DQErr configure(class TraceSettings &settings);
 
@@ -955,6 +980,8 @@ private:
 
 	TraceDqr::ADDRESS computeAddress();
 	TraceDqr::DQErr processTraceMessage(NexusMessage &nm,TraceDqr::ADDRESS &pc,TraceDqr::ADDRESS &faddr,TraceDqr::TIMESTAMP &ts,bool &consumed);
+	void recordResync(const char *reason);
+	TraceDqr::DQErr resyncAfterError(const char *reason);
 };
 
 class SRec {

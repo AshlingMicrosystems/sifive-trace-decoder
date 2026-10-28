@@ -356,7 +356,7 @@ private:
 // class SliceFileParser: Class to parse binary or ascii nexus messages into a NexusMessage object
 class SliceFileParser {
 public:
-             SliceFileParser(char *filename,int srcBits);
+             SliceFileParser(char *filename,int srcBits,TySifiveBTypeEncoding btypeEncoding = BTYPE_ENC_NTRACE);
              ~SliceFileParser();
   TraceDqr::DQErr readNextTraceMsg(NexusMessage &nm,class Analytics &analytics,bool &haveMsg);
   TraceDqr::DQErr getFileOffset(int &size,int &offset);
@@ -375,6 +375,7 @@ private:
   // add other counts for each message type
 
   int           srcbits;
+  TySifiveBTypeEncoding btypeEncoding;
   std::ifstream tf;
   int           tfSize;
   int           SWTsock;
@@ -403,6 +404,7 @@ private:
   TraceDqr::DQErr readNextByte(uint8_t *byte);
   TraceDqr::DQErr parseVarField(uint64_t *val,int *width);
   TraceDqr::DQErr parseFixedField(int width, uint64_t *val);
+  TraceDqr::BType toBType(uint64_t rawBType);
   TraceDqr::DQErr parseDirectBranch(NexusMessage &nm,Analytics &analytics);
   TraceDqr::DQErr parseIndirectBranch(NexusMessage &nm,Analytics &analytics);
   TraceDqr::DQErr parseDirectBranchWS(NexusMessage &nm,Analytics &analytics);
@@ -510,7 +512,7 @@ public:
 	bool itcPerfEnable;
 	int itcPerfChannel;
 	uint32_t itcPerfMarkerValue;
-	TySifiveTsProcessing m_timestamp_procesing_mechanism = TySifiveTsProcessing::TS_DEFAULT;
+	TySifiveTsProcessing m_timestamp_procesing_mechanism = TySifiveTsProcessing::TS_RELATIVE_ADD;
 private:
 	TraceDqr::DQErr propertyToBool(const char *src,bool &value);
 };

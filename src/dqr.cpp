@@ -7757,10 +7757,10 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
 				bt = "Exception or Interrupt";
 				break;
-			case TraceDqr::BTYPE_EXT_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_EXT_INTERRUPT:
+			case TraceDqr::BTYPE_INTERRUPT:
 				bt = "Interrupt";
 				break;				
 			case TraceDqr::BTYPE_UNDEFINED:
@@ -7940,10 +7940,10 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
 				bt = "Exception or Interrupt";
 				break;
-			case TraceDqr::BTYPE_EXT_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_EXT_INTERRUPT:
+			case TraceDqr::BTYPE_INTERRUPT:
 				bt = "Interrupt";
 				break;					
 			case TraceDqr::BTYPE_UNDEFINED:
@@ -8056,10 +8056,10 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
 				bt = "Exception or Interrupt";
 				break;
-			case TraceDqr::BTYPE_EXT_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_EXT_INTERRUPT:
+			case TraceDqr::BTYPE_INTERRUPT:
 				bt = "Interrupt";
 				break;					
 			case TraceDqr::BTYPE_UNDEFINED:
@@ -8126,10 +8126,10 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 			case TraceDqr::BTYPE_EXCEPTION_OR_INTERRUPT:
 				bt = "Exception or Interrupt";
 				break;
-			case TraceDqr::BTYPE_EXT_EXCEPTION:
+			case TraceDqr::BTYPE_EXCEPTION:
 				bt = "Exception";
 				break;
-			case TraceDqr::BTYPE_EXT_INTERRUPT:
+			case TraceDqr::BTYPE_INTERRUPT:
 				bt = "Interrupt";
 				break;					
 			case TraceDqr::BTYPE_UNDEFINED:
@@ -8909,7 +8909,7 @@ void Count::dumpCounts(int core)
 	printf("Count::dumpCounts(): core: %d, i_cnt: %d, history: 0x%08llx, histBit: %d, takenCount: %d, notTakenCount: %d\n",core,i_cnt[core],history[core],histBit[core],takenCount[core],notTakenCount[core]);
 }
 
-SliceFileParser::SliceFileParser(char *filename,int srcBits)
+SliceFileParser::SliceFileParser(char *filename,int srcBits,TySifiveBTypeEncoding btypeEncoding)
 {
     if(filename)
 	{
@@ -8920,6 +8920,7 @@ SliceFileParser::SliceFileParser(char *filename,int srcBits)
 		m_read_from_file = false;
 	}
 	srcbits = srcBits;
+	this->btypeEncoding = btypeEncoding;
 
 	msgSlices      = 0;
 	bitIndex       = 0;
@@ -9426,7 +9427,7 @@ TraceDqr::DQErr SliceFileParser::parseIndirectHistory(NexusMessage &nm,Analytics
 
 	bits += 2;
 
-	nm.indirectHistory.b_type = (TraceDqr::BType)tmp;
+	nm.indirectHistory.b_type = toBType(tmp);
 
 	// parse the variable length the i-cnt
 
@@ -9555,7 +9556,7 @@ TraceDqr::DQErr SliceFileParser::parseIndirectHistoryWS(NexusMessage &nm,Analyti
 
 	bits += 2;
 
-	nm.indirectHistoryWS.b_type = (TraceDqr::BType)tmp;
+	nm.indirectHistoryWS.b_type = toBType(tmp);
 
 	// parse the variable length the i-cnt
 
@@ -9961,7 +9962,7 @@ TraceDqr::DQErr SliceFileParser::parseIndirectBranch(NexusMessage &nm,Analytics 
 
 	bits += 2;
 
-	nm.indirectBranch.b_type = (TraceDqr::BType)tmp;
+	nm.indirectBranch.b_type = toBType(tmp);
 
 //	if (globalDebugFlag) {
 //		printf("parseIndirectBranch(): b_type: %d\n",nm.indirectBranch.b_type);
@@ -10103,7 +10104,7 @@ TraceDqr::DQErr SliceFileParser::parseIndirectBranchWS(NexusMessage &nm,Analytic
 
 	bits += 2;
 
-	nm.indirectBranchWS.b_type = (TraceDqr::BType)tmp;
+	nm.indirectBranchWS.b_type = toBType(tmp);
 
 	// parse the variable length the i-cnt
 
@@ -10971,6 +10972,27 @@ TraceDqr::DQErr SliceFileParser::parseFixedField(int width, uint64_t *val)
 	}
 
 	return TraceDqr::DQERR_OK;
+}
+
+// Convert the raw 2 bit B-TYPE field to its N-Trace meaning, so code after the
+// parser does not need to know which encoding the encoder used
+
+TraceDqr::BType SliceFileParser::toBType(uint64_t rawBType)
+{
+	if (btypeEncoding != BTYPE_ENC_SIFIVE) {
+		return (TraceDqr::BType)rawBType;
+	}
+
+	switch (rawBType) {
+	case 0:
+		return TraceDqr::BTYPE_INDIRECT;
+	case 1:
+		return TraceDqr::BTYPE_EXCEPTION;
+	case 2:
+		return TraceDqr::BTYPE_INTERRUPT;	// SiFive "Hardware"
+	default:
+		return TraceDqr::BTYPE_UNDEFINED;
+	}
 }
 
 TraceDqr::DQErr SliceFileParser::parseVarField(uint64_t *val,int *width)
