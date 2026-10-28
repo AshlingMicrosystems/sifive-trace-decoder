@@ -106,10 +106,11 @@ struct TDecoderConfig
 	uint32_t timestamp_counter_size_in_bits = 40;
 	uint32_t timestamp_tick_clk_freq_hz = 0;
 	TySifiveTsProcessing timestamp_procesing_mechanism = TySifiveTsProcessing::TS_RELATIVE_ADD;
-	TySifiveBTypeEncoding btype_encoding = TySifiveBTypeEncoding::BTYPE_ENC_NTRACE;
 	uint32_t src_field_size_bits = 0;
 	TraceDqr::ITCOptions itc_print_options = TraceDqr::ITC_OPT_NLS;
 	uint32_t itc_print_channel = 0;
+	// Applications pass this struct into the library, so add new fields at the end to keep the offsets of existing ones
+	TySifiveBTypeEncoding btype_encoding = TySifiveBTypeEncoding::BTYPE_ENC_NTRACE;
 };
 
 // Interface Class that provides access to the decoder related
