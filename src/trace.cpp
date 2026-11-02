@@ -5208,6 +5208,9 @@ TraceDqr::DQErr Trace::configure(TraceSettings &settings)
 	resyncCore = 0;
 	resyncOffset = 0;
 	resyncReason = nullptr;
+	resyncHaveMessage = false;
+	resyncContinues = false;
+	nmStartTime = 0;
 
 	if (settings.odName != nullptr) {
 		int len;
@@ -5857,7 +5860,7 @@ bool Trace::isSynced(int core)
 	}
 }
 
-bool Trace::getResyncEvent(int &core,uint32_t &offset,const char *&reason)
+bool Trace::getResyncEvent(int &core,uint32_t &offset,const char *&reason,NexusMessage *&msg,bool &continued)
 {
 	if (resyncPending == false) {
 		return false;
@@ -5866,6 +5869,8 @@ bool Trace::getResyncEvent(int &core,uint32_t &offset,const char *&reason)
 	core = resyncCore;
 	offset = resyncOffset;
 	reason = resyncReason;
+	msg = resyncHaveMessage ? &resyncMessage : nullptr;
+	continued = resyncContinues;
 
 	resyncPending = false;
 
@@ -5875,14 +5880,77 @@ bool Trace::getResyncEvent(int &core,uint32_t &offset,const char *&reason)
 // Note that decoding of the current core is being abandoned at the current trace message. Only
 // recorded if the core was decoding; nothing is lost by an error while waiting for a sync. If
 // there are several before getResyncEvent() is called, the first one is kept.
+// msgValid is false when the message itself is corrupt, so its fields cannot be shown.
 
-void Trace::recordResync(const char *reason)
+void Trace::recordResync(const char *reason,bool msgValid)
 {
 	if ((resyncPending == false) && isSynced(currentCore)) {
 		resyncPending = true;
 		resyncCore = currentCore;
 		resyncOffset = nm.offset;
 		resyncReason = reason;
+		resyncHaveMessage = msgValid;
+		resyncContinues = false;
+
+		if (msgValid) {
+			// The message is dropped instead of retired. Keep it so it can still be shown, with the time
+			// and next address retiring it would have given (see processTraceMessage()). The next
+			// address is only known when the message carries it; otherwise it depends on the
+			// instructions that could not be decoded.
+
+			TraceDqr::tsType tsType = TraceDqr::TS_rel;
+
+			resyncMessage = nm;
+			resyncMessage.time = nmStartTime;
+			resyncMessage.currentAddress = (TraceDqr::ADDRESS)-1;
+
+			switch (nm.tcode) {
+			case TraceDqr::TCODE_SYNC:
+				tsType = TraceDqr::TS_full;
+				resyncMessage.currentAddress = nm.sync.f_addr << 1;
+				break;
+			case TraceDqr::TCODE_DIRECT_BRANCH_WS:
+				tsType = TraceDqr::TS_full;
+				resyncMessage.currentAddress = nm.directBranchWS.f_addr << 1;
+				break;
+			case TraceDqr::TCODE_INDIRECT_BRANCH_WS:
+				tsType = TraceDqr::TS_full;
+				resyncMessage.currentAddress = nm.indirectBranchWS.f_addr << 1;
+				break;
+			case TraceDqr::TCODE_INDIRECTBRANCHHISTORY_WS:
+				tsType = TraceDqr::TS_full;
+				resyncMessage.currentAddress = nm.indirectHistoryWS.f_addr << 1;
+				break;
+			case TraceDqr::TCODE_INDIRECT_BRANCH:
+				resyncMessage.currentAddress = lastFaddr[currentCore] ^ (nm.indirectBranch.u_addr << 1);
+				break;
+			case TraceDqr::TCODE_INDIRECTBRANCHHISTORY:
+				resyncMessage.currentAddress = lastFaddr[currentCore] ^ (nm.indirectHistory.u_addr << 1);
+				break;
+			default:
+				break;
+			}
+
+			if (nm.haveTimestamp) {
+				resyncMessage.time = processTS(tsType,nmStartTime,nm.timestamp);
+			}
+		}
+	}
+}
+
+// Note that the trace does not match the program within the current message, while decoding goes
+// on: the message's own address is still right, so decoding carries on from it. Reported the same
+// way as a resync, but the core stays synced.
+
+void Trace::recordMismatch(const char *reason)
+{
+	if (resyncPending == false) {
+		resyncPending = true;
+		resyncCore = currentCore;
+		resyncOffset = nm.offset;
+		resyncReason = reason;
+		resyncHaveMessage = false;
+		resyncContinues = true;
 	}
 }
 
@@ -5891,7 +5959,7 @@ void Trace::recordResync(const char *reason)
 
 TraceDqr::DQErr Trace::resyncAfterError(const char *reason)
 {
-	recordResync(reason);
+	recordResync(reason,true);
 
 	lastTime[currentCore] = 0;
 	currentAddress[currentCore] = 0;
@@ -7638,7 +7706,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 						if(m_fp)
 							fprintf(m_fp, "\nTrace: %s\n", nm.messageToString(3).c_str());
 					}
-					recordResync("corrupt trace message");
+					recordResync("corrupt trace message",false);
 
 					lastTime[currentCore] = 0;
 					currentAddress[currentCore] = 0;
@@ -7650,6 +7718,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 			readNewTraceMessage = false;
 			currentCore = nm.coreId;
+			nmStartTime = lastTime[currentCore];
 			*nm_out = &nm;
 			
 			// if set see if HTM trace message, switch to HTM mode
@@ -8773,6 +8842,33 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				break;
 			}
 
+			// History bits keep the walk going even when the I-CNT has run out, since a HIST-full
+			// ResourceFull message carries no I-CNT. A message that does carry one ends where it runs
+			// out, so bits still left then mean the trace does not match the program (e.g. bits lost by
+			// the encoder), and so does a walk on history alone longer than any I-CNT (22 bits,
+			// NTRACE_MAX_ICNT in the N-Trace spec). Without this check, a loop with no conditional
+			// branch, such as "j .", is walked forever.
+
+			if (counts->getCurrentCountType(currentCore) == TraceDqr::COUNTTYPE_history) {
+				bool msgHasICnt = (nm.tcode != TraceDqr::TCODE_RESOURCEFULL) || (nm.resourceFull.rCode == 0);
+				int icnt = counts->getICnt(currentCore);
+
+				if ((msgHasICnt && (icnt <= 0)) || (icnt < -(1 << 22))) {
+					printf("Error: instruction count used up with history bits left (i-cnt: %d)\n",icnt);
+
+					// An IndirectBranchHist's address is still right, so carry on from it
+					if ((nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY) || (nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY_WS)) {
+						recordMismatch("instruction count used up before the branch history");
+						counts->resetCounts(currentCore);
+
+						state[currentCore] = TRACE_STATE_RETIREMESSAGE;
+						break;
+					}
+
+					return resyncAfterError("instruction count used up before the branch history");
+				}
+			}
+
 //			printf("state TRACE_STATE_GETNEXTINSTRUCTION\n");
 
 			// Should first process addr, and then compute next addr!!! If can't compute next addr, it is an error.
@@ -8797,7 +8893,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 			if (status != TraceDqr::DQERR_OK) {
 				printf("Error: getInstructionByAddress failed - looking for next sync message\n");
 
-				recordResync("traced address is not in the program");
+				recordResync("traced address is not in the program",true);
 
 				lastTime[currentCore] = 0;
 				currentAddress[currentCore] = 0;
@@ -8859,6 +8955,20 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 			if (addr == (TraceDqr::ADDRESS)-1) {
 				if (brFlags == TraceDqr::BRFLAG_unknown) {
+					// Only an I-CNT-full ResourceFull may leave branches for a later message. A message
+					// with history carries the outcome of every branch in its I-CNT, so running out of
+					// bits first means the trace does not match the program. Its address is still
+					// right, so carry on from it, but without the leftover count.
+
+					if ((nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY) ||
+					    (nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY_WS) ||
+					    ((nm.tcode == TraceDqr::TCODE_CORRELATION) && (nm.correlation.cdf == 1))) {
+						printf("Error: branch history used up with i-cnt %d left\n",counts->getICnt(currentCore));
+
+						recordMismatch("branch history used up before the instruction count");
+						counts->resetCounts(currentCore);
+					}
+
 					// read another trace message and retry
 
 					state[currentCore] = TRACE_STATE_RETIREMESSAGE;
@@ -8987,6 +9097,23 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				//wesprintf("TEMP: still have valid counts %d\n", counts->getCurrentCountType(currentCore));
 
 				return status;
+			}
+
+			// An IndirectBranch(Hist) message with B-TYPE 0 reports a jump through a register, so its
+			// I-CNT must end on that jump. Ending on anything else means the trace does not match the
+			// program; the message's address is still right, so decoding carries on from it. The sync
+			// versions are also sent on straight-line code, so they are not checked.
+
+			{
+				bool jumpReported = ((nm.tcode == TraceDqr::TCODE_INDIRECT_BRANCH) && (nm.indirectBranch.b_type == TraceDqr::BTYPE_INDIRECT)) ||
+				                    ((nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY) && (nm.indirectHistory.b_type == TraceDqr::BTYPE_INDIRECT));
+				bool endsOnJump = (addr == (TraceDqr::ADDRESS)-1) || ((crFlag & (TraceDqr::isReturn | TraceDqr::isSwap)) != 0);
+
+				if (jumpReported && !endsOnJump) {
+					printf("Error: instruction count ends at %08llx, which is not a jump through a register\n",instructionInfo.address);
+
+					recordMismatch("instruction count does not end on the jump the message reports");
+				}
 			}
 
 			// counts have expired. Retire this message and read next trace message and update. This should cause the

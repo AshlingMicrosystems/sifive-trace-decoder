@@ -831,7 +831,7 @@ private:
 	%ignore Trace::flushITCPrintStr(int core,bool &haveData,TraceDqr::TIMESTAMP &startTime,TraceDqr::TIMESTAMP &endtime);
 	%ignore Trace::haveFirstSync();
 	%ignore Trace::isSynced(int core);
-	%ignore Trace::getResyncEvent(int &core,uint32_t &offset,const char *&reason);
+	%ignore Trace::getResyncEvent(int &core,uint32_t &offset,const char *&reason,NexusMessage *&msg,bool &continued);
 #endif // SWIG
 
 class Trace {
@@ -892,10 +892,12 @@ public:
 	void SetFilePoiter(FILE* fp);
 
 	// Sync status, used by the decoder interface to hold back output until the first sync and to
-	// mark where decoding was abandoned after an error (getResyncEvent() returns each one once)
+	// mark where decoding was abandoned after an error (getResyncEvent() returns each one once, with
+	// the message that was dropped, or nullptr if it was corrupt). continued is set when the trace did
+	// not match the program but decoding went on from the message's own address.
 	bool haveFirstSync() { return firstSyncFound; }
 	bool isSynced(int core);
-	bool getResyncEvent(int &core,uint32_t &offset,const char *&reason);
+	bool getResyncEvent(int &core,uint32_t &offset,const char *&reason,NexusMessage *&msg,bool &continued);
 private:
 	enum state {
 		TRACE_STATE_SYNCCATE,
@@ -935,6 +937,10 @@ private:
 	int              resyncCore;
 	uint32_t         resyncOffset;
 	const char      *resyncReason;
+	bool             resyncHaveMessage;
+	bool             resyncContinues;
+	NexusMessage     resyncMessage;
+	TraceDqr::TIMESTAMP nmStartTime;	// time of the core's previous message when nm was read
 	int              currentCore;
 	int              srcbits;
 	bool             bufferItc;
@@ -980,7 +986,8 @@ private:
 
 	TraceDqr::ADDRESS computeAddress();
 	TraceDqr::DQErr processTraceMessage(NexusMessage &nm,TraceDqr::ADDRESS &pc,TraceDqr::ADDRESS &faddr,TraceDqr::TIMESTAMP &ts,bool &consumed);
-	void recordResync(const char *reason);
+	void recordResync(const char *reason,bool msgValid);
+	void recordMismatch(const char *reason);
 	TraceDqr::DQErr resyncAfterError(const char *reason);
 };
 
