@@ -7723,7 +7723,13 @@ void  NexusMessage::messageToText(char *dst,size_t dst_len,int level)
 	}
 
 	if ((tcode != TraceDqr::TCODE_INCIRCUITTRACE) && (tcode != TraceDqr::TCODE_INCIRCUITTRACE_WS)) {
-		n += snprintf(dst+n,dst_len-n,"NxtAddr: %08llx, TCode: ",currentAddress);
+		if (currentAddress == (TraceDqr::ADDRESS)-1) {
+			// a message dropped by a decode error, whose next address depends on instructions not decoded
+			n += snprintf(dst+n,dst_len-n,"NxtAddr: unknown, TCode: ");
+		}
+		else {
+			n += snprintf(dst+n,dst_len-n,"NxtAddr: %08llx, TCode: ",currentAddress);
+		}
 	}
 
 	switch (tcode) {

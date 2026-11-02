@@ -885,10 +885,30 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
         firstPrint = false;
     };
 
-    auto mark_gap_in_page = [&](uint64_t gap_offset, const char* gap_reason) {
+    auto mark_gap_in_page = [&](uint64_t gap_offset, const char* gap_reason, NexusMessage* gap_msg, bool continued) {
+        // The message being decoded was dropped instead of retired, so show it with the error rather
+        // than leave it out of the output
+        if (trace_flag && (gap_msg != nullptr)) {
+            gap_msg->messageToText(dst, sizeof dst, msgLevel);
+
+            char line[2048]; size_t pos = 0;
+            if (!firstPrint) { (la_active ? la_block : out_lines).emplace_back(); } // blank line
+            if (srcbits > 0) pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "[%d] ", gap_msg->coreId);
+            pos += (size_t)snprintf(line + pos, sizeof(line) - pos, "Trace: %s", dst);
+            (la_active ? la_block : out_lines).emplace_back(line, line + pos);
+            firstPrint = false;
+        }
+
         char text[256];
-        snprintf(text, sizeof(text), "%s at byte %llu of this page; instructions are missing until the next sync",
-                 gap_reason, (unsigned long long)(gap_offset - m_trace_start_idx));
+        if (continued) {
+            snprintf(text, sizeof(text), "%s at byte %llu of this page; the trace does not match the program, so the "
+                     "instructions decoded for this message may be wrong or missing", gap_reason,
+                     (unsigned long long)(gap_offset - m_trace_start_idx));
+        }
+        else {
+            snprintf(text, sizeof(text), "%s at byte %llu of this page; instructions are missing until the next sync",
+                     gap_reason, (unsigned long long)(gap_offset - m_trace_start_idx));
+        }
         add_decode_error(text);
     };
 
@@ -920,13 +940,16 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
 
         // ---------- GAPS LEFT BY DECODER ERRORS ----------
         // The decoder recovers from an error by waiting for the next sync, so the instructions in
-        // between are missing. Mark that where it affects the current page.
-        int         gap_core    = 0;
-        uint32_t    gap_offset  = 0;
-        const char* gap_reason  = nullptr;
-        bool        gap_in_page = false;
+        // between are missing; or, when the trace does not match the program within a message, it
+        // carries on from the message's address. Mark either where it affects the current page.
+        int           gap_core      = 0;
+        uint32_t      gap_offset    = 0;
+        const char*   gap_reason    = nullptr;
+        NexusMessage* gap_msg       = nullptr;
+        bool          gap_continued = false;
+        bool          gap_in_page   = false;
 
-        if (trace->getResyncEvent(gap_core, gap_offset, gap_reason)) {
+        if (trace->getResyncEvent(gap_core, gap_offset, gap_reason, gap_msg, gap_continued)) {
             if (gap_offset < m_trace_start_idx) {
                 if (!trace->isSynced(gap_core)) {
                     pending_gap        = true;
@@ -960,7 +983,7 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
         // returned: that instruction is good and comes before the gap.
         const bool gap_after_output = (instInfo != nullptr) && ((nm == nullptr) || (gap_offset >= nm->offset));
         if (gap_in_page && !gap_after_output) {
-            mark_gap_in_page(gap_offset, gap_reason);
+            mark_gap_in_page(gap_offset, gap_reason, gap_msg, gap_continued);
             gap_in_page = false;
         }
 
@@ -1214,20 +1237,22 @@ TySifiveTraceDecodeError SifiveDecoderInterface::DecodeBuffer(char* out_file, ch
         }
 
         if (gap_in_page) {
-            mark_gap_in_page(gap_offset, gap_reason);
+            mark_gap_in_page(gap_offset, gap_reason, gap_msg, gap_continued);
         }
 
     } while ((ec == TraceDqr::DQERR_OK) && !stopped_early);
 
     // A gap recorded by the call that ended the decode (e.g. a corrupt last message)
     {
-        int         gap_core   = 0;
-        uint32_t    gap_offset = 0;
-        const char* gap_reason = nullptr;
+        int           gap_core      = 0;
+        uint32_t      gap_offset    = 0;
+        const char*   gap_reason    = nullptr;
+        NexusMessage* gap_msg       = nullptr;
+        bool          gap_continued = false;
 
-        if (trace->getResyncEvent(gap_core, gap_offset, gap_reason) &&
+        if (trace->getResyncEvent(gap_core, gap_offset, gap_reason, gap_msg, gap_continued) &&
             (gap_offset >= m_trace_start_idx) && (gap_offset <= m_trace_stop_idx)) {
-            mark_gap_in_page(gap_offset, gap_reason);
+            mark_gap_in_page(gap_offset, gap_reason, gap_msg, gap_continued);
         }
     }
 
