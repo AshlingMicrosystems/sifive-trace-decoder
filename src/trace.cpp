@@ -8856,10 +8856,12 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 				if ((msgHasICnt && (icnt <= 0)) || (icnt < -(1 << 22))) {
 					printf("Error: instruction count used up with history bits left (i-cnt: %d)\n",icnt);
 
-					// An IndirectBranchHist's address is still right, so carry on from it
+					// An IndirectBranchHist's address is still right, so carry on from it, without the
+					// return addresses on the stack, which may not apply there
 					if ((nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY) || (nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY_WS)) {
 						recordMismatch("instruction count used up before the branch history");
 						counts->resetCounts(currentCore);
+						counts->resetStack(currentCore);
 
 						state[currentCore] = TRACE_STATE_RETIREMESSAGE;
 						break;
@@ -8958,7 +8960,8 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					// Only an I-CNT-full ResourceFull may leave branches for a later message. A message
 					// with history carries the outcome of every branch in its I-CNT, so running out of
 					// bits first means the trace does not match the program. Its address is still
-					// right, so carry on from it, but without the leftover count.
+					// right, so carry on from it, but without the leftover count or the return
+					// addresses on the stack, which may not apply there.
 
 					if ((nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY) ||
 					    (nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY_WS) ||
@@ -8967,6 +8970,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 						recordMismatch("branch history used up before the instruction count");
 						counts->resetCounts(currentCore);
+						counts->resetStack(currentCore);
 					}
 
 					// read another trace message and retry
@@ -8996,7 +9000,22 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 //						nm.dump();
 //					}
 
-					return resyncAfterError("next instruction address could not be computed");
+					// A message that reports a jump through a register carries that jump's target, so this
+					// earlier jump was left out of the trace (e.g. a return the encoder did not report).
+					// Show this jump, then carry on from the message's target without the leftover count.
+					// What ran in between is unknown, so the return addresses on the stack may not
+					// apply there; drop them, so a later return is reported as a mismatch instead of
+					// going to a stale address.
+
+					if ((nm.tcode == TraceDqr::TCODE_INDIRECT_BRANCH) || (nm.tcode == TraceDqr::TCODE_INDIRECT_BRANCH_WS) ||
+					    (nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY) || (nm.tcode == TraceDqr::TCODE_INDIRECTBRANCHHISTORY_WS)) {
+						recordMismatch("jump through a register not reported");
+						counts->resetCounts(currentCore);
+						counts->resetStack(currentCore);
+					}
+					else {
+						return resyncAfterError("next instruction address could not be computed");
+					}
 				}
 			}
 
@@ -9101,8 +9120,9 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 
 			// An IndirectBranch(Hist) message with B-TYPE 0 reports a jump through a register, so its
 			// I-CNT must end on that jump. Ending on anything else means the trace does not match the
-			// program; the message's address is still right, so decoding carries on from it. The sync
-			// versions are also sent on straight-line code, so they are not checked.
+			// program; the message's address is still right, so decoding carries on from it, without
+			// the return addresses on the stack, which may not apply there. The sync versions are also
+			// sent on straight-line code, so they are not checked.
 
 			{
 				bool jumpReported = ((nm.tcode == TraceDqr::TCODE_INDIRECT_BRANCH) && (nm.indirectBranch.b_type == TraceDqr::BTYPE_INDIRECT)) ||
@@ -9113,6 +9133,7 @@ TraceDqr::DQErr Trace::NextInstruction(Instruction **instInfo, NexusMessage **ms
 					printf("Error: instruction count ends at %08llx, which is not a jump through a register\n",instructionInfo.address);
 
 					recordMismatch("instruction count does not end on the jump the message reports");
+					counts->resetStack(currentCore);
 				}
 			}
 
